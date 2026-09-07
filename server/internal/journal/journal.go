@@ -27,7 +27,12 @@ import (
 type Kind string
 
 const (
-	KindQuote          Kind = "quote"
+	KindQuote Kind = "quote"
+	// KindStrategy records one spec's fate at the start of a run: data.name,
+	// data.path, data.armed and, when it did not arm, data.reason. A run that
+	// trades nothing is a run that refused every spec, and this is where it
+	// says which and why.
+	KindStrategy       Kind = "strategy"
 	KindBars           Kind = "bars"
 	KindTargets        Kind = "targets"
 	KindRiskDecision   Kind = "risk_decision"

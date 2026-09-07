@@ -19,6 +19,7 @@ import (
 	"math"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/chinmay28/bulls-and-bears/server/internal/bars"
@@ -138,29 +139,34 @@ func (r *Runner) Run(ctx context.Context, runID string) (Outcome, error) {
 		return out, write(journal.New(journal.KindRun, "", map[string]string{"status": "halted", "reason": reason}))
 	}
 
-	// 1. Specs: every file, armed or refused, on the record.
+	// 1. Specs: every file, armed or refused, on the record. Each one is
+	// journalled with its reason, so a run that trades nothing says on the
+	// phone which specs it saw and why it refused them.
 	loaded := spec.LoadDir(r.Cfg.SpecsDir, now())
 	var armed []armedSpec
 	for _, l := range loaded {
 		so := StrategyOutcome{Path: l.Path}
 		if l.Err != nil {
 			so.Reason = l.Err.Error()
-			out.Strategies = append(out.Strategies, so)
-			continue
+		} else {
+			so.Name = l.Spec.Name
+			st, err := strategy.New(l.Spec.Strategy, l.Spec.Universe, l.Spec.Params, l.Spec.Sizing)
+			if err != nil {
+				so.Reason = err.Error()
+			} else {
+				so.Armed = true
+				armed = append(armed, armedSpec{spec: l.Spec, st: st})
+			}
 		}
-		so.Name = l.Spec.Name
-		st, err := strategy.New(l.Spec.Strategy, l.Spec.Universe, l.Spec.Params, l.Spec.Sizing)
-		if err != nil {
-			so.Reason = err.Error()
-			out.Strategies = append(out.Strategies, so)
-			continue
-		}
-		so.Armed = true
-		armed = append(armed, armedSpec{spec: l.Spec, st: st})
 		out.Strategies = append(out.Strategies, so)
+		if err := write(journal.New(journal.KindStrategy, "", map[string]any{
+			"name": specName(so), "path": filepath.Base(so.Path), "armed": so.Armed, "reason": so.Reason,
+		})); err != nil {
+			return out, err
+		}
 	}
 	if len(armed) == 0 {
-		return fail("no armed strategy: nothing to trade")
+		return fail(noArmedReason(r.Cfg.SpecsDir, out.Strategies))
 	}
 
 	// 2. Bars for every symbol any armed strategy needs; stale or mixed is a
@@ -415,4 +421,36 @@ func indexOf(list []StrategyOutcome, name string) int {
 		}
 	}
 	return len(list) - 1
+}
+
+// specName is what to call a spec in the journal: its declared name, or the
+// file's when it did not parse far enough to have one.
+func specName(so StrategyOutcome) string {
+	if so.Name != "" {
+		return so.Name
+	}
+	base := filepath.Base(so.Path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+// noArmedReason says why the run has nothing to trade, in one line a phone
+// can read: an empty specs directory is a different problem from three specs
+// the runtime refused, and the fix is different too.
+func noArmedReason(specsDir string, outcomes []StrategyOutcome) string {
+	if len(outcomes) == 0 {
+		return "no strategy specs in " + specsDir + ": nothing to trade"
+	}
+	reasons := make([]string, 0, len(outcomes))
+	for _, so := range outcomes {
+		reasons = append(reasons, specName(so)+": "+so.Reason)
+	}
+	return fmt.Sprintf("no armed strategy: %s refused: %s",
+		plural(len(outcomes), "spec"), strings.Join(reasons, "; "))
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }

@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { Page } from '../components/Layout'
 import { RunBadge } from '../components/status'
@@ -54,6 +54,8 @@ export default function RunDetail() {
             )}
           </Card>
 
+          <NextStep events={data.events} />
+
           <Card>
             {data.events.map((e, i) => (
               <div key={i}>
@@ -68,15 +70,62 @@ export default function RunDetail() {
   )
 }
 
+/** NextStep turns the two failures an operator can actually fix into the tap
+ *  that fixes them. A run that ends "no armed strategy" or "bars: ... stale"
+ *  is not a bug to report, it is a missing spec or missing bars — and both
+ *  now have a screen. Anything else is left to the journal below. */
+function NextStep({ events }: { events: JournalEvent[] }) {
+  const failure = [...events].reverse().find((e) => e.kind === 'error')
+  const text = failure ? String((failure.data as { error?: string } | undefined)?.error ?? '') : ''
+  if (!text) return null
+
+  if (text.includes('no armed strategy') || text.includes('no strategy specs')) {
+    return (
+      <Card>
+        <div className="title">Nothing was armed</div>
+        <p className="sub" style={{ margin: '6px 0 12px' }}>
+          {text.includes('no strategy specs')
+            ? 'There are no spec files at all. A spec is what research writes when a backtest clears the 1.0 out-of-sample Sharpe floor; import one and the next run has something to trade.'
+            : 'Every spec on disk was refused. The reasons are in the journal below and on each strategy.'}
+        </p>
+        <Link className="primary block" to="/strategies" style={{ textAlign: 'center', textDecoration: 'none' }}>
+          Go to Strategies
+        </Link>
+      </Card>
+    )
+  }
+
+  if (text.startsWith('bars:')) {
+    return (
+      <Card>
+        <div className="title">The bars were not good enough to trade on</div>
+        <p className="sub" style={{ margin: '6px 0 12px' }}>
+          {text} The runner refuses stale or missing history rather than guessing at it.
+        </p>
+        <Link className="primary block" to="/settings" style={{ textAlign: 'center', textDecoration: 'none' }}>
+          Refresh bars in Settings
+        </Link>
+      </Card>
+    )
+  }
+
+  return null
+}
+
 function tone(e: JournalEvent): string {
-  if (e.kind === 'error' || e.kind === 'halt' || (e.kind === 'risk_decision' && !e.allowed)) return 'b'
+  if (e.kind === 'error' || e.kind === 'halt' || (e.kind === 'risk_decision' && !e.allowed) || refused(e)) return 'b'
   if (e.kind === 'fill' || (e.kind === 'risk_decision' && e.allowed)) return 'g'
   return ''
 }
 
+/** A spec the run would not arm: the reason a run with no orders had none. */
+function refused(e: JournalEvent): boolean {
+  return e.kind === 'strategy' && (e.data as { armed?: boolean } | undefined)?.armed === false
+}
+
 function Event({ e }: { e: JournalEvent }) {
   const color =
-    e.kind === 'error' || e.kind === 'halt' || (e.kind === 'risk_decision' && !e.allowed)
+    e.kind === 'error' || e.kind === 'halt' || (e.kind === 'risk_decision' && !e.allowed) || refused(e)
       ? 'var(--bad)'
       : e.kind === 'fill' || (e.kind === 'risk_decision' && e.allowed)
         ? 'var(--good)'
@@ -106,6 +155,8 @@ function describe(e: JournalEvent): string {
       return `${d.Symbol} ${n(d.Bid)} / ${n(d.Ask)} · last ${n(d.Last)}`
     case 'bars':
       return `${d.symbol} · ${d.bars} bars through ${d.last} · ${d.source}`
+    case 'strategy':
+      return d.armed ? `${d.name} · armed` : `${d.name} · not armed · ${d.reason}`
     case 'targets': {
       const w = (d.weights ?? {}) as Record<string, number>
       return `${d.strategy} · ${Object.entries(w)

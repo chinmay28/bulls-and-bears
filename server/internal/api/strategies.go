@@ -281,38 +281,32 @@ type barsView struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// handleBars reports the bars on disk for every symbol any spec names.
+// handleBars reports the bars on disk: every symbol a spec names, and every
+// symbol the directory holds a file for. The second half is what makes the
+// screen useful before there is a spec — bars fetched ahead of one are the
+// head start, not clutter, and a run that will fail on stale data says so
+// here first.
 func (s *Server) handleBars(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
-	seen := map[string]bool{}
 	out := []barsView{}
-	for _, l := range spec.LoadDir(s.SpecsDir, now) {
-		if l.Spec == nil {
-			continue
+	for _, sym := range s.knownSymbols(now) {
+		v := barsView{Symbol: sym}
+		series, err := bars.Read(filepath.Join(s.BarsDir, sym+".parquet"))
+		switch {
+		case err != nil:
+			v.Error = err.Error()
+			v.Stale = true
+		case len(series) == 0:
+			v.Error = "empty"
+			v.Stale = true
+		default:
+			v.Bars = len(series)
+			v.First = series[0].Date.Format("2006-01-02")
+			v.Last = series[len(series)-1].Date.Format("2006-01-02")
+			v.Source = series[len(series)-1].Source
+			v.Stale = bars.Stale(series, now, 3)
 		}
-		for _, sym := range l.Spec.Universe {
-			if seen[sym] {
-				continue
-			}
-			seen[sym] = true
-			v := barsView{Symbol: sym}
-			series, err := bars.Read(filepath.Join(s.BarsDir, sym+".parquet"))
-			switch {
-			case err != nil:
-				v.Error = err.Error()
-				v.Stale = true
-			case len(series) == 0:
-				v.Error = "empty"
-				v.Stale = true
-			default:
-				v.Bars = len(series)
-				v.First = series[0].Date.Format("2006-01-02")
-				v.Last = series[len(series)-1].Date.Format("2006-01-02")
-				v.Source = series[len(series)-1].Source
-				v.Stale = bars.Stale(series, now, 3)
-			}
-			out = append(out, v)
-		}
+		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -112,11 +112,19 @@ Four tabs, in HostMan's shape:
 - **Strategies** — each spec with its provenance, how long its TTL has left,
   and its signal now: the z-score against the entry and exit bands. **Run
   backtest** replays it over the bars on the machine and says whether the
-  number matches the spec's.
+  number matches the spec's. **Import a spec** takes the YAML research wrote
+  and installs it, if the runtime would run it; a spec's own screen removes
+  it again.
 - **Book** — equity over time, positions marked to market, working orders,
   fills with the price they got.
 - **Settings** — version, the halt state, the bars per symbol and whether
-  they are stale, recent runs, the broker connection.
+  they are stale with **Refresh bars from Yahoo**, recent runs, the broker
+  connection.
+
+A run that trades nothing says why on its own screen: every spec it saw is
+journalled with its reason, and the two failures an operator can fix — no
+armed spec, and bars too old to trade on — link to the screen that fixes
+them.
 
 ## Commands
 
@@ -156,8 +164,11 @@ Server flags:
 | GET | `/api/overview` | the dashboard in one round trip |
 | GET / POST / DELETE | `/api/halt` | read, write, remove the halt marker |
 | GET | `/api/strategies`, `/api/strategies/{name}` | specs with status, provenance, signal |
+| POST | `/api/strategies` | import a spec: same schema, Sharpe floor and TTL a run applies |
+| DELETE | `/api/strategies/{name}` | remove a spec; its bars stay |
 | POST | `/api/strategies/{name}/backtest` | replay over the bars on disk |
 | GET | `/api/bars` | bars per symbol and staleness |
+| POST | `/api/bars/refresh` | refill bars from Yahoo; never shortens a series |
 | GET | `/api/book` | the paper book: positions, orders, fills, history |
 | GET | `/api/runs`, `/api/runs/{id}`, `/api/runs/{id}/jsonl` | journals |
 | POST | `/api/run` | today's cycle, now |
@@ -209,12 +220,13 @@ clone — the installer clones with `--filter=blob:none` for that reason.
 ```
 server/
   cmd/bnb/              entrypoint: serve, run, backtest, login, discover, halt
-  internal/bars/        the Parquet bar and its invariants
+  internal/bars/        the Parquet bar and its invariants; refill/ brings a directory up to date
   internal/spec/        spec loading, schema validation, TTL and Sharpe refusals
   internal/strategy/    the Strategy interface and registry; pairs/ is pairs_zscore
   internal/backtest/    the replay engine that matches the Python one
   internal/metrics/     Sharpe, max drawdown, drawdown duration
-  internal/marketdata/  Quote and the data interfaces; replay/ serves quotes from bars
+  internal/marketdata/  Quote and the data interfaces; replay/ serves quotes from bars,
+                        yahoo/ fetches daily history on demand
   internal/broker/      the Broker interface; paper/ is the SQLite paper book
   internal/risk/        risk.yaml, the rule gate, the kill switch
   internal/journal/     append-only JSONL, and the invariant checker

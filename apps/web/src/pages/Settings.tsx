@@ -1,14 +1,16 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api'
+import { ApiError, api } from '../api'
 import { TabPage } from '../components/Layout'
 import { HaltBanner, ModeBadge, RunBadge } from '../components/status'
-import { Badge, Card, Loading, SectionTitle, useLoader } from '../components/ui'
+import { Badge, Banner, Card, Loading, SectionTitle, useLoader } from '../components/ui'
 import { parts, time } from '../lib/format'
+import type { BarsInfo, RefillResult } from '../types'
 
 export default function Settings() {
   // Refreshed on a timer so a halt from elsewhere surfaces without a reload.
   const { data: self, error, offline, reload } = useLoader(() => api.self(), [], 5000)
-  const { data: bars } = useLoader(() => api.bars(), [], 30000)
+  const { data: bars, reload: reloadBars } = useLoader(() => api.bars(), [], 30000)
   const { data: runs } = useLoader(() => api.runs(), [], 15000)
 
   return (
@@ -58,28 +60,7 @@ export default function Settings() {
       )}
 
       <SectionTitle>Bars</SectionTitle>
-      <Card>
-        {!bars || bars.length === 0 ? (
-          <p className="sub" style={{ margin: 0 }}>
-            No symbols to show: no spec names any. Bars are Parquet files the research side writes, one per symbol.
-          </p>
-        ) : (
-          <>
-            {bars.map((b) => (
-              <div className="kv" key={b.symbol}>
-                <span className="k">{b.symbol}</span>
-                <span className="v" style={{ color: b.stale ? 'var(--warn)' : undefined }}>
-                  {b.error ? b.error : parts(b.source, `through ${b.last}`, b.stale && 'stale')}
-                </span>
-              </div>
-            ))}
-            <p className="sub" style={{ margin: '8px 0 0' }}>
-              The runner refuses to trade on bars more than three trading days old. Refresh them with{' '}
-              <span className="mono">research/scripts/gld_gdx.py</span> or the fetcher.
-            </p>
-          </>
-        )}
-      </Card>
+      <BarsCard bars={bars} onRefreshed={reloadBars} />
 
       <SectionTitle>Runs</SectionTitle>
       <Card>
@@ -132,5 +113,75 @@ export default function Settings() {
         )}
       </Card>
     </TabPage>
+  )
+}
+
+/** BarsCard shows what history is on disk and refills it. The runner refuses
+ *  to trade on bars more than three trading days old, so this is the screen
+ *  that turns a halted run back into a tradeable one — and the fetch never
+ *  shortens a series: a symbol whose fetch fails is left exactly as it was
+ *  and says so. */
+function BarsCard({ bars, onRefreshed }: { bars: BarsInfo[] | null; onRefreshed: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [results, setResults] = useState<RefillResult[] | null>(null)
+
+  const refresh = async () => {
+    setBusy(true)
+    setError('')
+    setResults(null)
+    try {
+      setResults(await api.refreshBars())
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBusy(false)
+      onRefreshed()
+    }
+  }
+
+  const empty = !bars || bars.length === 0
+  return (
+    <Card>
+      {empty ? (
+        <p className="sub" style={{ margin: '0 0 12px' }}>
+          No bars yet. They are Parquet files, one per symbol, and a refresh fetches every symbol a spec names.
+          Import a spec first, or fetch from a terminal with{' '}
+          <span className="mono">research/scripts/gld_gdx.py</span>.
+        </p>
+      ) : (
+        <>
+          {bars.map((b) => (
+            <div className="kv" key={b.symbol}>
+              <span className="k">{b.symbol}</span>
+              <span className="v" style={{ color: b.stale ? 'var(--warn)' : undefined }}>
+                {b.error ? b.error : parts(b.source, `through ${b.last}`, b.stale && 'stale')}
+              </span>
+            </div>
+          ))}
+          <p className="sub" style={{ margin: '8px 0 12px' }}>
+            The runner refuses to trade on bars more than three trading days old.
+          </p>
+        </>
+      )}
+
+      {error && (
+        <div style={{ marginBottom: 12 }}>
+          <Banner tone="bad">{error}</Banner>
+        </div>
+      )}
+      {results?.map((r) => (
+        <div className="kv" key={r.symbol}>
+          <span className="k">{r.symbol}</span>
+          <span className="v" style={{ color: r.error ? 'var(--bad)' : undefined }}>
+            {r.error ? r.error : r.added > 0 ? `+${r.added} bars through ${r.last}` : 'already current'}
+          </span>
+        </div>
+      ))}
+
+      <button className="secondary block" disabled={busy || empty} onClick={refresh}>
+        {busy ? 'Fetching…' : 'Refresh bars from Yahoo'}
+      </button>
+    </Card>
   )
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { api } from '../api'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ApiError, api } from '../api'
 import { Page } from '../components/Layout'
 import { describeSignal, EquityLine, ZGauge } from '../components/signal'
 import { StrategyBadge } from '../components/status'
@@ -162,6 +162,9 @@ export default function StrategyDetail() {
               </Card>
             </>
           )}
+
+          <SectionTitle>Remove</SectionTitle>
+          <RemoveCard name={name} />
         </>
       )}
     </Page>
@@ -202,5 +205,55 @@ function BacktestResult({ bt }: { bt: Backtest }) {
         {bt.sharpe != null && (agree ? <Badge tone="good">Matches the spec</Badge> : <Badge tone="warn">Differs from the spec</Badge>)}
       </div>
     </div>
+  )
+}
+
+/** RemoveCard deletes the spec file. A spec imported by mistake, or one long
+ *  past its TTL that only clutters the list, should not need a terminal to
+ *  get rid of. The bars stay: they cost a fetch and belong to no one spec. */
+function RemoveCard({ name }: { name: string }) {
+  const navigate = useNavigate()
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const remove = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.deleteStrategy(name)
+      navigate('/strategies')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card>
+      <p className="sub" style={{ margin: '0 0 12px' }}>
+        Deletes <span className="mono">{name}</span> from the specs directory. The bars it used stay on disk, and
+        nothing that has already traded is touched — the journal keeps every run this spec was part of.
+      </p>
+      {error && (
+        <div style={{ marginBottom: 12 }}>
+          <Banner tone="bad">{error}</Banner>
+        </div>
+      )}
+      {confirming ? (
+        <div className="actions">
+          <button className="secondary" onClick={() => setConfirming(false)} disabled={busy}>
+            Keep it
+          </button>
+          <button className="danger" onClick={remove} disabled={busy}>
+            {busy ? 'Removing…' : 'Remove the spec'}
+          </button>
+        </div>
+      ) : (
+        <button className="secondary block" onClick={() => setConfirming(true)}>
+          Remove this spec
+        </button>
+      )}
+    </Card>
   )
 }

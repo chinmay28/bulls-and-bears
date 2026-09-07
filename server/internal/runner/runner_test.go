@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
@@ -267,5 +268,76 @@ func TestSecondRunOfTheDayAppendsAndIsDone(t *testing.T) {
 	after := len(events(t, f, "2026-09-04"))
 	if after <= before {
 		t.Error("a second run must append, never truncate")
+	}
+}
+
+// TestRunJournalsEverySpecsFate covers the screen a phone actually shows: a
+// run that trades nothing must still say which specs it saw and why each one
+// did not arm.
+func TestRunJournalsEverySpecsFate(t *testing.T) {
+	f := setup(t, nil)
+	os.WriteFile(filepath.Join(f.specs, "junk.yaml"), []byte("name: x\n"), 0o600)
+	out, _ := f.runner().Run(context.Background(), "2026-09-04")
+
+	evs := events(t, f, "2026-09-04")
+	if got := kinds(evs)[journal.KindStrategy]; got != 2 {
+		t.Fatalf("strategy events = %d, want one per spec file", got)
+	}
+	byName := map[string]map[string]any{}
+	for _, ev := range evs {
+		if ev.Kind != journal.KindStrategy {
+			continue
+		}
+		var d map[string]any
+		if err := json.Unmarshal(ev.Data, &d); err != nil {
+			t.Fatal(err)
+		}
+		byName[d["name"].(string)] = d
+	}
+	if d := byName["gld_gdx_pairs"]; d == nil || d["armed"] != true || d["reason"] != "" {
+		t.Errorf("gld_gdx_pairs = %v, want armed with no reason", d)
+	}
+	if d := byName["junk"]; d == nil || d["armed"] != false || d["reason"] == "" {
+		t.Errorf("junk = %v, want refused with a reason", d)
+	}
+	if d := byName["junk"]; d != nil && d["path"] != "junk.yaml" {
+		t.Errorf("path = %v, want the base name only", d["path"])
+	}
+	// The armed spec still trades: journalling the fates changes nothing else.
+	if out.Status != "completed" {
+		t.Errorf("status = %q, want completed", out.Status)
+	}
+}
+
+func TestNoArmedReasonNamesTheProblem(t *testing.T) {
+	tests := []struct {
+		name     string
+		outcomes []StrategyOutcome
+		want     string
+	}{
+		{
+			name: "no files at all",
+			want: "no strategy specs in /specs: nothing to trade",
+		},
+		{
+			name:     "one refused",
+			outcomes: []StrategyOutcome{{Name: "gld_gdx_pairs", Path: "/specs/gld_gdx_pairs.yaml", Reason: "expired"}},
+			want:     "no armed strategy: 1 spec refused: gld_gdx_pairs: expired",
+		},
+		{
+			name: "several, one of them unparseable",
+			outcomes: []StrategyOutcome{
+				{Name: "a", Path: "/specs/a.yaml", Reason: "oos_sharpe 0.40 is below the 1.0 floor"},
+				{Path: "/specs/junk.yaml", Reason: "not a strategy spec"},
+			},
+			want: "no armed strategy: 2 specs refused: a: oos_sharpe 0.40 is below the 1.0 floor; junk: not a strategy spec",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := noArmedReason("/specs", tt.outcomes); got != tt.want {
+				t.Errorf("noArmedReason() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
