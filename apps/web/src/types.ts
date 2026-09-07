@@ -184,6 +184,16 @@ export interface BarsInfo {
   error?: string
 }
 
+/** One symbol's outcome from a bars refill. */
+export interface RefillResult {
+  symbol: string
+  bars: number
+  first?: string
+  last?: string
+  added: number
+  error?: string
+}
+
 /** The dashboard in one round trip. */
 export interface Overview {
   mode: Mode

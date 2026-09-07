@@ -47,3 +47,31 @@ way HostMan does: the daemon, the paper broker, the risk gate and the journal
 are the plan's; the app is how they are watched and stopped from a phone.
 `tt backtest`, `tt run`, `tt report` become `bnb` subcommands and API routes as
 the phases land.
+
+The plan's §4.1 says of the bar files: **Python writes; Go reads.** The Go
+runtime now also writes them, from `internal/marketdata/yahoo` through
+`internal/bars/refill`, when the operator asks for a refresh from the app.
+The reason is the one §0 gives for adapting a component: the phone is how
+this system is actually operated, and a run that halts on stale bars was
+otherwise only fixable at a terminal, which is exactly when the operator does
+not have one. The direction of the contract is unchanged — both halves write
+the same §4.1 schema, stamp `source: yahoo`, and read each other's files; the
+Go side's parity is held by `internal/bars` round-trip tests.
+
+Three things keep the second writer from being a second source of truth:
+
+- The fetch is **on demand only**. Nothing in the daily cycle reaches the
+  network for history; the scheduler still runs on whatever is on disk, and
+  refuses stale bars exactly as before.
+- A refill **never shortens a series**. A symbol whose fetch fails, or whose
+  answer holds fewer bars than the file already has, is left untouched and
+  reported. Research remains the way to *deepen* history; the app's refresh
+  is for the tail.
+- The **current day is dropped**. Yahoo serves a partial bar while the
+  session is open, and the runner already builds today from quotes.
+
+Specs may likewise be imported from the app (`POST /api/strategies`). This is
+not a way around provenance: an upload goes through `spec.Check`, the same
+schema, the same 1.0 out-of-sample Sharpe floor and the same TTL a run
+applies, and a spec that would be refused is not written at all. Research
+still has to have earned it — the file just no longer has to arrive by scp.

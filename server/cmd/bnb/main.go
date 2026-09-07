@@ -37,6 +37,7 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/broker/paper"
 	"github.com/chinmay28/bulls-and-bears/server/internal/halt"
 	"github.com/chinmay28/bulls-and-bears/server/internal/marketdata/replay"
+	"github.com/chinmay28/bulls-and-bears/server/internal/marketdata/yahoo"
 	"github.com/chinmay28/bulls-and-bears/server/internal/mcp"
 	"github.com/chinmay28/bulls-and-bears/server/internal/mcp/oauth"
 	"github.com/chinmay28/bulls-and-bears/server/internal/risk"
@@ -155,6 +156,10 @@ func run(args []string) error {
 		Log: log, Version: appVersion(), DataDir: t.dataDir, SpecsDir: t.specsDir, BarsDir: t.barsDir,
 		Book: book, Risk: riskCfg, RunOffset: t.offset, Ref: *ref, Auth: auth,
 		RunNow: func(ctx context.Context, runID string) (runner.Outcome, error) { return r.Run(ctx, runID) },
+		// Bars come from Yahoo, as docs/DISCOVERY.md decided until the MCP is
+		// known to serve history. The fetch is on demand only: nothing here
+		// reaches the network unless the operator asks it to.
+		Fetcher: &yahoo.Client{HTTP: &http.Client{Timeout: 30 * time.Second}},
 	}
 
 	loop := &sched.Loop{

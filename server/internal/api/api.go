@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/chinmay28/bulls-and-bears/server/internal/bars/refill"
 	"github.com/chinmay28/bulls-and-bears/server/internal/broker/paper"
 	"github.com/chinmay28/bulls-and-bears/server/internal/risk"
 	"github.com/chinmay28/bulls-and-bears/server/internal/runner"
@@ -28,6 +29,9 @@ type Server struct {
 	Book *paper.Book
 	// Risk is the thresholds in force, for the meters.
 	Risk risk.Config
+	// Fetcher is where a bars refill gets its history; nil when the server
+	// runs without one, and the refresh endpoint then says so.
+	Fetcher refill.Fetcher
 	// RunNow performs a cycle for a run id; nil when there is no runner.
 	RunNow func(ctx context.Context, runID string) (runner.Outcome, error)
 	// RunOffset is how long before the close the scheduler fires.
@@ -54,9 +58,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/halt", s.handleResume)
 
 	mux.HandleFunc("GET /api/strategies", s.handleListStrategies)
+	mux.HandleFunc("POST /api/strategies", s.handleImportStrategy)
 	mux.HandleFunc("GET /api/strategies/{name}", s.handleGetStrategy)
+	mux.HandleFunc("DELETE /api/strategies/{name}", s.handleDeleteStrategy)
 	mux.HandleFunc("POST /api/strategies/{name}/backtest", s.handleBacktest)
 	mux.HandleFunc("GET /api/bars", s.handleBars)
+	mux.HandleFunc("POST /api/bars/refresh", s.handleRefreshBars)
 
 	mux.HandleFunc("GET /api/book", s.handleBook)
 

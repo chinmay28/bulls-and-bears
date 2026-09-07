@@ -1,4 +1,15 @@
-import type { Backtest, BarsInfo, Book, HaltStatus, Overview, Run, RunDetail, SelfInfo, Strategy } from './types'
+import type {
+  Backtest,
+  BarsInfo,
+  Book,
+  HaltStatus,
+  Overview,
+  RefillResult,
+  Run,
+  RunDetail,
+  SelfInfo,
+  Strategy,
+} from './types'
 
 /** ApiError carries the server's message so the UI can show it verbatim. */
 export class ApiError extends Error {
@@ -48,6 +59,18 @@ export const api = {
   backtest: (name: string) =>
     request<Backtest>(`/api/strategies/${encodeURIComponent(name)}/backtest`, { method: 'POST' }),
   bars: () => request<BarsInfo[]>('/api/bars'),
+  /** Installs a spec research wrote. The server applies the same schema, the
+   *  same out-of-sample floor and the same TTL a run applies, so this cannot
+   *  install a strategy the runtime would only refuse. */
+  importStrategy: (yaml: string, replace = false) =>
+    request<Strategy>('/api/strategies', { method: 'POST', ...json({ yaml, replace }) }),
+  /** Removes a spec. The bars stay: they cost a fetch and belong to no one spec. */
+  deleteStrategy: (name: string) =>
+    request<void>(`/api/strategies/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  /** Refills the bars on disk from Yahoo. With no symbols it does every one
+   *  the specs name and every one already on disk. */
+  refreshBars: (symbols?: string[]) =>
+    request<RefillResult[]>('/api/bars/refresh', { method: 'POST', ...json({ symbols: symbols ?? [] }) }),
 
   book: () => request<Book>('/api/book'),
 

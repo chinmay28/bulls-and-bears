@@ -97,6 +97,14 @@ func Load(path string, now time.Time) (*Spec, error) {
 	if err != nil {
 		return nil, err
 	}
+	return Check(src, path, now)
+}
+
+// Check answers for raw spec bytes exactly as Load answers for a file, so a
+// spec arriving from somewhere other than the disk — an upload from the
+// phone — is judged by the same rules and the same errors. path is only what
+// the errors name; nothing is read or written.
+func Check(src []byte, path string, now time.Time) (*Spec, error) {
 	s, err := parse(src)
 	if err != nil {
 		return nil, &Invalid{Path: path, Reason: err.Error()}
