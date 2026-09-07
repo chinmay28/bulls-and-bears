@@ -22,6 +22,9 @@ type Decision struct {
 	// Qty is the quantity allowed, which may be less than asked for when
 	// gross leverage scales intents down.
 	Qty float64
+	// NeedsConfirm marks a live order above the confirmation threshold: it
+	// is allowed, and a person is asked first unless the run said --yes.
+	NeedsConfirm bool
 }
 
 // State is everything the rules need to know about the account and the day.

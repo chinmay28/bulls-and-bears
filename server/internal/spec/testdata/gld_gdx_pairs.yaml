@@ -1,0 +1,22 @@
+name: gld_gdx_pairs
+version: 1
+strategy: pairs_zscore            # must match a registered Go + Python implementation
+universe: [GLD, GDX]
+params:
+  hedge_ratio: 1.631              # from cointegrating regression on training window
+  lookback: 20                    # bars for spread mean/std
+  entry_z: 2.0
+  exit_z: 0.5
+  max_hold_days: 30               # ~3x half-life; hard time stop
+sizing:
+  gross_leverage: 0.9             # half-Kelly, capped
+  max_notional_per_leg_usd: 2000
+provenance:
+  train_window: {from: 2015-01-01, to: 2022-12-31}
+  test_window:  {from: 2023-01-01, to: 2026-08-31}
+  oos_sharpe: 1.32
+  oos_max_drawdown: -0.087
+  cost_model: {commission_usd: 0, slippage_bps: 5}
+  research_git_sha: "abc1234"
+  generated_at: 2026-09-06T00:00:00Z
+  ttl_days: 90                    # runtime refuses to run a stale spec

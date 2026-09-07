@@ -1,0 +1,15 @@
+# Risk gate thresholds (docs/PLAN.md §6). Copy to risk.yaml and pass it with
+# --risk. Every value here is the default: leave a line out, or set it to
+# zero, and the default applies. An unknown key is an error, so a misspelling
+# cannot quietly leave a rule at its default. Fractions are fractions: 0.03
+# is 3%. The per-leg notional cap and gross leverage are not here — they come
+# from the strategy spec's sizing block, because they are what was backtested.
+
+max_orders_per_day: 10             # orders sent in one trading day, across symbols; beyond this, reject
+daily_loss_limit: 0.03             # loss from start-of-day equity past which nothing may open; closes still go
+drawdown_kill_switch: 0.10         # drawdown from the equity high-water mark that halts until `bnb resume`
+consecutive_daily_limit_hits: 3    # daily-limit hits in a row that halt for the rest of the week
+stale_quote: 15m                   # a quote older than this cannot back an order
+divergence_warn: 0.02              # paper-vs-live equity gap, as a fraction of paper, that warns
+divergence_halt: 0.05              # ... and that halts
+confirm_above_usd: 500             # live only: a single order above this asks a person first, unless --yes
