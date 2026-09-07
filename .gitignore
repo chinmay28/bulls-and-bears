@@ -1,0 +1,29 @@
+# Build output
+bin/
+node_modules/
+apps/web/dist/
+
+# Vite writes the PWA into the Go embed directory at build time. Nothing there
+# is source: `make server` drops in a placeholder index.html when the web app
+# hasn't been built, so the binary always compiles.
+server/internal/web/dist/
+
+# Runtime data: the halt marker, the journal, the paper book and, later, the
+# broker token. Never commit any of it.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Market data is fetched, not committed; goldens under golden/ are.
+research/data/
+research/.venv/
+research/**/__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.DS_Store
+
+# TypeScript incremental build state
+apps/web/tsconfig.tsbuildinfo
