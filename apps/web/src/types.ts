@@ -24,29 +24,164 @@ export interface HaltStatus {
   halt: Halt | null
 }
 
-/** The paper book at a glance. Null on the overview until there is one. */
-export interface Book {
+/** The paper book at a glance: the money, and how close the guardrails are. */
+export interface BookSummary {
   equity: number
+  startingCash: number
+  startOfDay: number
+  highWater: number
   dayChange: number
   sinceStartPct: number
   drawdownPct: number
   dailyLossPct: number
   ordersToday: number
+  positions: number
+  gross: number
+  openedAt: string
 }
 
-export type StrategyStatus = 'armed' | 'refused'
+export type StrategyStatus = 'armed' | 'refused' | 'invalid'
 
-export interface StrategySummary {
+export interface Signal {
+  date: string
+  z: number
+  zDefined: boolean
+  /** +1 long the spread, −1 short, 0 flat. */
+  state: number
+  entryZ: number
+  exitZ: number
+  weights: Record<string, number>
+  lastBar: string
+  stale: boolean
+}
+
+export interface Provenance {
+  trainFrom: string
+  trainTo: string
+  testFrom: string
+  testTo: string
+  oosSharpe: number
+  oosMaxDrawdown: number
+  commissionUsd: number
+  slippageBps: number
+  researchGitSha: string
+  generatedAt: string
+  ttlDays: number
+}
+
+export interface Strategy {
   name: string
+  path: string
   status: StrategyStatus
-  /** Why the runtime will not run it, when refused. */
+  /** Why the runtime will not run it, when refused or invalid. */
   reason?: string
+  strategy?: string
+  universe?: string[]
+  params?: Record<string, number>
+  sizing?: { grossLeverage: number; maxNotionalPerLegUsd: number }
+  provenance?: Provenance
+  freshDays: number
+  expires?: string
+  signal: Signal | null
+  signalError?: string
 }
 
-export interface RunSummary {
+export interface Backtest {
+  name: string
+  from: string
+  to: string
+  bars: number
+  trades: number
+  sharpe: number | null
+  maxDrawdown: number
+  maxDrawdownDuration: number
+  totalReturn: number
+  equity: { date: string; equity: number }[]
+  specSharpe: number
+}
+
+export interface Run {
   runId: string
+  mode: string
   status: string
   events: number
+  orders: number
+  fills: number
+  rejected: number
+  errors: number
+  startedAt: string
+  endedAt: string
+  /** The journal checker's complaint, when an order lacked an allowed decision. */
+  invariant?: string
+}
+
+export interface JournalEvent {
+  ts: string
+  run_id: string
+  mode: string
+  kind: string
+  intent_id?: string
+  allowed?: boolean
+  data?: unknown
+}
+
+export interface RunDetail {
+  run: Run
+  events: JournalEvent[]
+  truncated: boolean
+}
+
+export interface Position {
+  symbol: string
+  qty: number
+  avgCost: number
+  mark: number
+  marketValue: number
+  unrealizedPnl: number
+}
+
+export interface Fill {
+  orderId: string
+  intentId: string
+  symbol: string
+  /** Signed: a sell is negative. */
+  qty: number
+  price: number
+  at: string
+}
+
+export interface OpenOrder {
+  id: string
+  intentId: string
+  symbol: string
+  side: string
+  qty: number
+  limit: number
+  placedAt: string
+}
+
+export interface Book {
+  mode: string
+  startingCash: number
+  cash: number
+  equity: number
+  openedAt: string
+  positions: Position[]
+  openOrders: OpenOrder[]
+  fills: Fill[]
+  history: { day: string; open: number; equity: number }[]
+  gross: number
+  grossOfEquity: number
+}
+
+export interface BarsInfo {
+  symbol: string
+  bars: number
+  first?: string
+  last?: string
+  source?: string
+  stale: boolean
+  error?: string
 }
 
 /** The dashboard in one round trip. */
@@ -54,7 +189,10 @@ export interface Overview {
   mode: Mode
   halted: boolean
   halt: Halt | null
-  book: Book | null
-  strategies: StrategySummary[]
-  lastRun: RunSummary | null
+  book: BookSummary | null
+  bookError?: string
+  strategies: Strategy[]
+  lastRun: Run | null
+  nextRun: { runId: string; at: string; earlyClose: boolean } | null
+  limits: { dailyLossLimit: number; drawdownKillSwitch: number; maxOrdersPerDay: number }
 }

@@ -1,19 +1,143 @@
-import { api } from '../api'
+import { api, ApiError } from '../api'
 import { TabPage } from '../components/Layout'
-import { Empty, Loading, useLoader } from '../components/ui'
+import { EquityLine } from '../components/signal'
+import { ModeBadge } from '../components/status'
+import { Badge, Card, Empty, Loading, Meter, SectionTitle, useLoader } from '../components/ui'
+import { parts, pct, shares, time, usd } from '../lib/format'
+import type { Book as BookData } from '../types'
 
 /** Positions, working orders and fills — the paper book, and later the live
- *  one beside it. Empty until the first run opens the book. */
+ *  one beside it. */
 export default function Book() {
-  const { data, error, loading, offline } = useLoader(() => api.overview(), [], 10000)
+  const { data, error, loading, offline } = useLoader(() => api.book(), [], 10000)
+  const noBook = error && !offline && !data && (error as unknown) instanceof ApiError
 
   return (
     <TabPage>
-      <Loading error={error} offline={offline} hasData={!!data} />
+      {!noBook && <Loading error={error} offline={offline} hasData={!!data} />}
       {!data && loading && <div className="empty">Loading…</div>}
-      {data && !data.book && (
-        <Empty message="The book is empty. Positions, orders and fills appear here once a run places something in the paper account." />
-      )}
+      {noBook && <Empty message={error ?? ''} />}
+      {data && <BookView book={data} />}
     </TabPage>
+  )
+}
+
+function BookView({ book }: { book: BookData }) {
+  const since = book.startingCash > 0 ? book.equity / book.startingCash - 1 : 0
+  return (
+    <>
+      <Card>
+        <div className="row between">
+          <div className="grow">
+            <div className="title">Paper book</div>
+            <div className="sub">{parts(`opened ${time(book.openedAt)}`, `cash ${usd(book.cash)}`)}</div>
+          </div>
+          <ModeBadge mode={book.mode} />
+        </div>
+        <div className="equity">{usd(book.equity)}</div>
+        <div className="sub">
+          <span style={{ color: since >= 0 ? 'var(--good)' : 'var(--bad)', fontWeight: 600 }}>{pct(since, true)}</span> since{' '}
+          {usd(book.startingCash)}
+        </div>
+        <EquityLine values={book.history.map((d) => d.equity)} />
+        <div style={{ marginTop: 10 }}>
+          <Meter label="Gross exposure" value={book.grossOfEquity * 100} display={`${usd(book.gross)} · ${pct(book.grossOfEquity)} of equity`} />
+        </div>
+      </Card>
+
+      <SectionTitle>Positions</SectionTitle>
+      {book.positions.length === 0 ? (
+        <Card>
+          <div className="empty" style={{ padding: 14 }}>
+            Flat. Positions appear here once a run places something.
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          {book.positions.map((p, i) => (
+            <div key={p.symbol}>
+              {i > 0 && <div className="list-divider inset" />}
+              <div className="row between" style={{ minHeight: 44 }}>
+                <div className="grow">
+                  <div className="title">
+                    {p.symbol} <span className="sub">{p.qty >= 0 ? 'long' : 'short'} {shares(p.qty)} sh</span>
+                  </div>
+                  <div className="sub">
+                    avg {usd(p.avgCost)} · mark {usd(p.mark)}
+                  </div>
+                </div>
+                <span className="num" style={{ fontWeight: 600, color: p.unrealizedPnl >= 0 ? 'var(--good)' : 'var(--bad)' }}>
+                  {usd(p.unrealizedPnl, true)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <SectionTitle>Working orders</SectionTitle>
+      <Card>
+        {book.openOrders.length === 0 ? (
+          <div className="empty" style={{ padding: 14 }}>
+            Nothing working. Orders go out at the close run and fill against the quote.
+          </div>
+        ) : (
+          book.openOrders.map((o, i) => (
+            <div key={o.id}>
+              {i > 0 && <div className="list-divider inset" />}
+              <div className="row between" style={{ minHeight: 44 }}>
+                <div className="grow">
+                  <div className="title">
+                    {o.side.toUpperCase()} {o.symbol} {shares(o.qty)} @ {usd(o.limit)}
+                  </div>
+                  <div className="sub">
+                    {o.id} · {time(o.placedAt)}
+                  </div>
+                </div>
+                <Badge tone="accent">Open</Badge>
+              </div>
+            </div>
+          ))
+        )}
+      </Card>
+
+      <SectionTitle>Fills</SectionTitle>
+      <Card>
+        {book.fills.length === 0 ? (
+          <div className="empty" style={{ padding: 14 }}>
+            No fills yet.
+          </div>
+        ) : (
+          book.fills.map((f, i) => (
+            <div key={`${f.orderId}-${i}`}>
+              {i > 0 && <div className="list-divider inset" />}
+              <div className="row between" style={{ minHeight: 44 }}>
+                <div className="grow">
+                  <div className="title">
+                    <span style={{ color: f.qty >= 0 ? 'var(--good)' : 'var(--bad)' }}>{f.qty >= 0 ? 'BUY' : 'SELL'}</span> {f.symbol}{' '}
+                    {shares(f.qty)} @ {usd(f.price)}
+                  </div>
+                  <div className="sub">
+                    {time(f.at)} · {f.orderId}
+                  </div>
+                </div>
+                <Badge tone="neutral">Paper</Badge>
+              </div>
+            </div>
+          ))
+        )}
+      </Card>
+
+      <SectionTitle>Paper vs live</SectionTitle>
+      <Card>
+        <div className="row between">
+          <div className="grow">
+            <div className="title">Live account not trading</div>
+            <div className="sub">Paper fills use bid/ask plus 5 bps. When live runs beside it, this compares the two.</div>
+          </div>
+          <Badge tone="neutral">Paper only</Badge>
+        </div>
+      </Card>
+    </>
   )
 }

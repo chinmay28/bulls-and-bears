@@ -4,7 +4,7 @@ import { Badge, Banner, Field, Sheet } from './ui'
 import { time } from '../lib/format'
 import type { Halt, Mode, StrategyStatus } from '../types'
 
-export function ModeBadge({ mode }: { mode: Mode }) {
+export function ModeBadge({ mode }: { mode: Mode | string }) {
   return mode === 'live' ? <Badge tone="warn">Live</Badge> : <Badge tone="accent">Paper</Badge>
 }
 
@@ -16,12 +16,38 @@ export function StrategyBadge({ status }: { status: StrategyStatus }) {
           Armed
         </Badge>
       )
+    case 'invalid':
+      return (
+        <Badge tone="bad" dot>
+          Not a spec
+        </Badge>
+      )
     default:
       return (
         <Badge tone="warn" dot>
           Refused
         </Badge>
       )
+  }
+}
+
+/** What a run came to. */
+export function RunBadge({ status }: { status: string }) {
+  switch (status) {
+    case 'completed':
+      return <Badge tone="good">Completed</Badge>
+    case 'halted':
+      return <Badge tone="warn">Halted</Badge>
+    case 'failed':
+      return <Badge tone="bad">Failed</Badge>
+    case 'started':
+      return (
+        <Badge tone="accent" dot pulse>
+          Running
+        </Badge>
+      )
+    default:
+      return <Badge tone="neutral">{status}</Badge>
   }
 }
 

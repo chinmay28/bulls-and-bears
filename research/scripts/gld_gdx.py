@@ -80,11 +80,11 @@ def main() -> int:
     gross = max(gross, 0.1)
     print(f"train Sharpe {metrics.sharpe(r):.2f}; half-Kelly leverage {gross:.3f}")
 
-    # Test: out of sample, warm start from the tail of train.
-    warm = TRAIN[1] - dt.timedelta(days=LOOKBACK * 2)
-    test_bars = {s: _slice(bars[s], warm, test[1]) for s in UNIVERSE}
-    tr = pairs.replay(test_bars, UNIVERSE, params, gross)
-    al = pairs.align(test_bars, UNIVERSE)
+    # Test: out of sample. The strategy is replayed over the whole history —
+    # the runtime sees every bar it has, so the state at the first test bar
+    # is what it would be live — and the book opens at the test window.
+    tr = pairs.replay(bars, UNIVERSE, params, gross)
+    al = pairs.align(bars, UNIVERSE)
     keep = (pd.to_datetime(al["date"]).dt.date >= test[0]).to_numpy()
     res = run_pairs(tr[keep].reset_index(drop=True), al[keep].reset_index(drop=True), UNIVERSE, COSTS)
     eq = res.equity["equity"].to_numpy()
@@ -111,8 +111,9 @@ def main() -> int:
         why = "synthetic data" if args.synthetic else f"OOS Sharpe {m['sharpe']:.2f} < 1.0"
         print(f"NOT PROMOTED ({why}): wrote {out}")
 
-    # Goldens: the whole test-window replay, signals for every aligned date.
-    golden_bars = {s: _slice(bars[s], warm, test[1]) for s in UNIVERSE}
+    # Goldens: the whole history, signals for every aligned date, the
+    # equity curve from the test window on.
+    golden_bars = bars
     sig = pairs.signals(golden_bars, UNIVERSE, params, gross)
     note = (
         f"# golden/gld_gdx\n\nParity fixtures for `pairs_zscore` (docs/PLAN.md §4.3, §4.4).\n\n"

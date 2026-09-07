@@ -25,6 +25,6 @@ provenance:
   cost_model:
     commission_usd: 0.0
     slippage_bps: 5.0
-  research_git_sha: 73a8b36
-  generated_at: '2026-09-07T14:33:09Z'
+  research_git_sha: 06a8e76
+  generated_at: '2026-09-07T14:44:30Z'
   ttl_days: 90
