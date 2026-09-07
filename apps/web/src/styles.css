@@ -1,0 +1,2184 @@
+/* Bulls and Bears is used one-handed on a phone: large tap targets, a bottom tab bar
+   within thumb reach, and safe-area padding so nothing hides under the home
+   indicator or the notch. */
+
+:root {
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-2: #f7f7fa;
+  --border: #e2e2ea;
+  --text: #16161a;
+  --text-dim: #6b6b76;
+  --accent: #5b5bd6;
+  --accent-soft: #eeeefc;
+  --good: #17864b;
+  --good-soft: #e4f6ec;
+  --warn: #9a6100;
+  --warn-soft: #fdf1dd;
+  --bad: #c0362c;
+  --bad-soft: #fceceb;
+  --shadow: 0 1px 2px rgba(16, 16, 32, 0.06), 0 8px 24px rgba(16, 16, 32, 0.04);
+  /* What a pressed button is washed with. Ink on a light ground, light on a
+     dark one — brightness alone barely shows on a surface that is already
+     nearly black. */
+  --press-tint: rgba(16, 16, 32, 0.1);
+  --radius: 16px;
+  --tap: 44px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0f;
+    --surface: #17171d;
+    --surface-2: #1f1f27;
+    --border: #2a2a34;
+    --text: #f2f2f5;
+    --text-dim: #9a9aa8;
+    --accent: #8b8bf5;
+    --accent-soft: #22223a;
+    --good: #4ade80;
+    --good-soft: #14301f;
+    --warn: #fbbf24;
+    --warn-soft: #33260a;
+    --bad: #f87171;
+    --bad-soft: #3a1a19;
+    --shadow: none;
+    --press-tint: rgba(255, 255, 255, 0.12);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* On a page short enough not to scroll, iOS anchors position: fixed to a
+   layout viewport that is short by the top inset, which left the tab bar
+   floating above the screen edge on Hosts and Apps while the taller Overview
+   and Settings sat flush. Making the document that much taller than the
+   viewport keeps every page in the state iOS measures correctly; it is a no-op
+   where there is no inset. */
+html {
+  min-height: calc(100% + env(safe-area-inset-top, 0px));
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* Stop iOS from bouncing the whole page behind the fixed tab bar. */
+  overscroll-behavior-y: none;
+}
+
+/* ---------- layout ---------- */
+
+.app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The brand lockup the tabs share: the app icon, then the name over the running
+   build. `brand` takes over the h1's job of soaking up the free space. */
+.header .brand-mark {
+  padding: 0;
+  border: 0;
+  background: none;
+  flex: none;
+  cursor: default;
+  /* A double tap must not zoom the page or wait for the browser to rule
+     out one; the viewport already forbids zooming, this removes the delay. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.header .brand-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: block;
+  flex: none;
+}
+
+.header .brand-mark:active .brand-logo {
+  transform: scale(0.94);
+}
+
+.header .brand {
+  flex: 1;
+  min-width: 0;
+}
+
+.header .brand h1 {
+  flex: none;
+  line-height: 1.15;
+}
+
+/* The running build, MAJOR.MINOR.<commit count> — see src/version.ts. Tabular
+   figures so the number doesn't shimmy as the patch count rolls over. */
+.header .brand-version {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.header .back {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 16px;
+  padding: 0;
+  min-height: auto;
+  font-weight: 500;
+}
+
+/* ---------- the developer mark ---------- */
+
+/* A small dark disk at the end of the shared header. It stays dark in both
+   themes, muted behind a hairline ring until it is touched, so it signs the app
+   without competing with the action beside it. */
+.header .dev {
+  flex: none;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  line-height: 0;
+}
+
+.header .dev-logo {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  /* The artwork is opaque black; the backing colour only shows while it loads. */
+  background: #101010;
+  box-shadow: 0 0 0 1px var(--border);
+  opacity: 0.8;
+  transition:
+    opacity 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.14s ease;
+}
+
+.header .dev:hover .dev-logo,
+.header .dev:focus-visible .dev-logo {
+  opacity: 1;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.header .dev:active .dev-logo {
+  transform: scale(0.94);
+}
+
+/* Tapping the mark throws the full badge over the app, dead centre of the
+   screen, with everything behind it blurred back. The veil and the badge run
+   their own fade-out; FLASH_MS in Layout.tsx unmounts the pair when they
+   are done, and a tap or Escape ends it early.
+
+   The veil is deliberately thin — the blur is what pushes the app back, so
+   painting over it would only waste the effect. Layout.tsx portals this to the
+   body so the blur has the whole app to work on. */
+.dev-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: saturate(140%) blur(26px);
+  -webkit-backdrop-filter: saturate(140%) blur(26px);
+  animation: dev-flash-veil 3s ease-in-out forwards;
+}
+
+/* Badge over handle, moving as one piece — the scale lives here so the two
+   never drift apart mid-animation. */
+.dev-flash-lockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  animation: dev-flash-badge 3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.dev-flash-logo {
+  width: min(64vmin, 320px);
+  height: min(64vmin, 320px);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+/* The whole logo, on nothing: it has its own badge shape, so the shadow follows
+   the drawing rather than a box around it. */
+.brand-flash-logo {
+  width: min(80vmin, 420px);
+  height: auto;
+  filter: drop-shadow(0 24px 60px rgba(0, 0, 0, 0.35));
+}
+
+/* Monospace to echo the badge's own wordmark, and tracked out so it reads as a
+   signature under the mark rather than a line of body copy. */
+.dev-flash-handle {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: clamp(13px, 3.2vmin, 17px);
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+@keyframes dev-flash-veil {
+  0% {
+    opacity: 0;
+  }
+  7% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes dev-flash-badge {
+  0% {
+    transform: scale(0.7);
+  }
+  14% {
+    transform: scale(1.02);
+  }
+  22% {
+    transform: scale(1);
+  }
+  82% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.06);
+  }
+}
+
+/* The veil's fade stays — it is only opacity — but the lockup holds still. */
+@media (prefers-reduced-motion: reduce) {
+  .dev-flash-lockup {
+    animation: none;
+  }
+}
+
+.main {
+  flex: 1;
+  padding: 16px 16px calc(env(safe-area-inset-bottom) + 92px);
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ---------- the floating add button ---------- */
+
+/* Adding sits in the bottom corner, a thumb's reach from the tab bar, rather
+   than in the top corner of the header. It floats over the page, so the tab
+   that carries one gives the scroll enough room to clear it — see below. */
+.fab {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(env(safe-area-inset-bottom) + 76px);
+  z-index: 25;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(16, 16, 32, 0.28);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.14s ease;
+}
+
+.fab svg {
+  width: 26px;
+  height: 26px;
+}
+
+.fab:active {
+  transform: scale(0.92);
+}
+
+/* The last card would otherwise sit under the button at the end of a scroll. */
+.app:has(.fab) .main {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 148px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab {
+    transition: none;
+  }
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  padding: 8px 8px calc(env(safe-area-inset-bottom) + 8px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  border-top: 1px solid var(--border);
+}
+
+.tabbar a {
+  flex: 1;
+  min-height: var(--tap);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  text-decoration: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 12px;
+}
+
+.tabbar a.active {
+  color: var(--accent);
+}
+
+.tabbar svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ---------- building blocks ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+a.card,
+button.card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin: 22px 4px 10px;
+}
+
+.section-title:first-child {
+  margin-top: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.row.between {
+  justify-content: space-between;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Used both for one-line list subtitles and for explanatory paragraphs, so it
+   wraps; add .truncate where a single line matters. */
+.sub {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 40px 20px;
+}
+
+.empty p {
+  margin: 0 0 16px;
+}
+
+/* ---------- badges and dots ---------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge.good {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.badge.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.badge.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.badge.neutral {
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.badge.accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: currentColor;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pulse {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------- meters ---------- */
+
+.meters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.meter-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.meter-label b {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* A process labels a meter with its name and pid, and some names are long. The
+   name gives way rather than pushing the figure off the row. */
+.meter-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter-label .pid {
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+/* A range bar fills only the part of the track the metric moved through, so its
+   span is offset rather than starting at zero, and carries a tick at the mean. */
+.bar.range {
+  position: relative;
+}
+
+.bar.range > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 999px;
+  background: var(--text);
+  opacity: 0.7;
+}
+
+.bar.warn > span {
+  background: var(--warn);
+}
+.bar.bad > span {
+  background: var(--bad);
+}
+
+/* The health strip on a host card: one slot per deployed app — green, red, or
+   the quiet border colour for an app with nothing to report. It answers "is
+   anything wrong here?" before the rows below say what. */
+.seg-strip {
+  display: flex;
+  gap: 3px;
+}
+
+.seg-strip > span {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.seg-strip > .good {
+  background: var(--good);
+}
+
+.seg-strip > .bad {
+  background: var(--bad);
+}
+
+/* The shortcuts on a host's card: its files, services, terminal and jobs as
+   four equal chips, icon over word, each a full tap target. They are buttons
+   inside a card that is itself a link, so they take their own tap and give
+   the card nothing. On a host Bulls and Bears cannot reach they dim, and the
+   disabled state is the button's own. */
+.tools {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 6px 4px;
+  border-color: var(--border);
+  font-size: 11px;
+  --press: 0.95;
+}
+
+.tool svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- forms ---------- */
+
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  /* 16px keeps iOS from zooming the viewport when a field is focused. */
+  font-size: 16px;
+  font-family: inherit;
+}
+
+textarea {
+  min-height: 88px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field .help {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 5px;
+  font-weight: 400;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  font-size: 15px;
+  min-height: var(--tap);
+}
+
+.checkbox input {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+/* ---------- buttons ---------- */
+
+button {
+  font: inherit;
+  font-weight: 600;
+  min-height: var(--tap);
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  /* How far a press pushes the button in. Small buttons override it: the same
+     scale reads as nothing on a chip and as a lurch on a full-width bar. */
+  --press: 0.97;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+/* The line above turns off iOS's own tap flash, which leaves a button with
+   nothing to say for itself while a finger is on it — and an action that then
+   goes to the network, like Check, looks like it ignored the press entirely.
+   The FAB has always drawn its own press; this is every other button doing the
+   same. Cards are excluded: they are surfaces, and a whole card flinching
+   reads as the page moving. */
+button:active:not(:disabled):not(.card) {
+  transform: scale(var(--press));
+  /* An inset shadow rather than a background of its own: it washes over
+     whatever colour the variant already has — grey, accent or red — so one
+     rule presses every button. */
+  box-shadow: inset 0 0 0 999px var(--press-tint);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+button.secondary {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+button.danger {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+button.ghost {
+  background: none;
+  color: var(--accent);
+  padding: 8px 4px;
+}
+
+button.block {
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.actions > * {
+  flex: 1;
+}
+
+/* ---------- sheet ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fade 0.15s ease;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 720px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  padding: 8px 16px calc(env(safe-area-inset-bottom) + 20px);
+  animation: rise 0.2s ease;
+}
+
+.sheet .grabber {
+  width: 38px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 8px auto 14px;
+}
+
+.sheet h2 {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(18px);
+  }
+}
+
+/* ---------- opening an app ---------- */
+
+/* Open sits beside a status badge on a card, so it is shaped like one — a pill
+   in the accent colour — rather than like the page's full-width buttons. The
+   badge next to it reports; this one acts, which is what the icon and the
+   filled ground say at a glance. */
+.open-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  min-height: 0;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  /* A pill this small needs a deeper push than a full-width button to read as
+     pressed at all. */
+  --press: 0.94;
+}
+
+/* On a host card's exception row the chip shrinks to its icon: the row already
+   names the app, and a column of labelled pills would out-shout the meters. */
+.open-chip.icon-only {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* A pill the size of a badge is smaller than a thumb. The visible chip stays
+   compact next to the badge; the thing you actually hit is the full 44px. */
+.open-chip::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--tap) - 100%) / -2) -6px;
+}
+
+.launch-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* In the actions row on an app's page the chip gives way to a full-width
+   button, which the icon joins rather than shrinks. */
+.actions button:has(.launch-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.actions .launch-icon {
+  width: 17px;
+  height: 17px;
+}
+
+/* ---------- open on which host ---------- */
+
+/* The choices in the sheet an app deployed to several hosts offers: one
+   full-width row each, naming the host over the address it will open. */
+.pick-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.pick-list button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.pick-list .grow,
+.pick-list .title,
+.pick-list .sub {
+  display: block;
+}
+
+.pick-list .launch-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--accent);
+}
+
+.pick-list .sub {
+  font-weight: 400;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- logs ---------- */
+
+.log {
+  background: #0c0c11;
+  color: #e6e6ef;
+  border-radius: 12px;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-height: 62vh;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.log .ok {
+  color: #6ee7a8;
+}
+.log .err {
+  color: #fca5a5;
+}
+.log .cmd {
+  color: #a5b4fc;
+}
+
+/* ---------- misc ---------- */
+
+.banner {
+  border-radius: 12px;
+  padding: 11px 13px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.banner.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.banner.good {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.banner.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.copyable {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.copyable pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: 12px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.copyable button {
+  flex: none;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+/* ---------- the file browser ---------- */
+
+/* A row is two targets: the whole line opens the thing, and a wide-enough
+   corner opens what can be done to it. Splitting them is what keeps a mis-tap
+   from being a delete. */
+.file-row {
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.file-row .file-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px 12px 14px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  font-weight: 400;
+}
+
+.file-row .file-open .title,
+.file-row .file-open .sub {
+  display: block;
+}
+
+.file-row .file-more {
+  flex: none;
+  width: 48px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text-dim);
+  font-size: 19px;
+  letter-spacing: 0.08em;
+}
+
+.file-row .file-more:active {
+  background: var(--surface-2);
+}
+
+.file-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--text-dim);
+}
+
+.file-icon.dir {
+  color: var(--accent);
+}
+
+.chevron {
+  color: var(--text-dim);
+  font-size: 20px;
+  line-height: 1;
+  flex: none;
+  padding: 0 8px;
+}
+
+/* The path, one tap per ancestor. It scrolls sideways rather than wrapping, so
+   a deep path never pushes the listing down the screen. */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  white-space: nowrap;
+  margin: -4px -4px 0;
+  padding: 0 4px 2px;
+  scrollbar-width: none;
+}
+
+.crumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.crumbs .crumb {
+  flex: none;
+  min-height: 32px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* The root crumb is the separator, so the one after it needs none of its own —
+   "/ etc / apt", not "/ / etc / apt". */
+.crumbs .crumb:nth-child(n + 3)::before {
+  content: '/';
+  color: var(--text-dim);
+  margin-right: 8px;
+}
+
+.crumbs .crumb:last-child {
+  color: var(--text);
+}
+
+/* ---------- permissions ---------- */
+
+/* chmod's three digits, drawn as what they are: a row per audience, a tap per
+   bit. Big targets, because this is the one screen where a mis-tap is the
+   difference between 640 and 644. */
+.perms {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.perm-who {
+  font-size: 14px;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.perm-bits {
+  display: flex;
+  gap: 6px;
+}
+
+.perm-bit {
+  width: 44px;
+  min-height: 40px;
+  padding: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 15px;
+  text-transform: none;
+}
+
+.perm-bit.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------- the text editor ---------- */
+
+/* Tall enough to be worth typing in on a phone, and never wrapped: a config
+   file's lines are the unit of meaning, and folding them hides which is which. */
+.editor {
+  min-height: 46vh;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  margin-bottom: 4px;
+}
+
+/* ---------- segmented control and chips ---------- */
+
+.segmented {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.segmented button {
+  flex: 1;
+  min-height: 36px;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.segmented button.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+
+.chips .chip {
+  min-height: 38px;
+  padding: 6px 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: none;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+/* A chip that is also a filter: it says which way the list is cut, so the one
+   in force has to be readable across the room rather than merely different.
+   They wrap, which is what keeps four of them usable on a narrow phone where a
+   segmented control would squeeze each label to nothing. */
+.chips .chip.on {
+  background: var(--accent);
+  /* The surface colour rather than white: against the lighter accent the dark
+     theme uses, white 13px text is barely legible, and the page's own
+     background reads as ink in either theme. */
+  color: var(--surface);
+}
+
+.chips .chip .count {
+  margin-left: 6px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- unit references ---------- */
+
+/* Other units, named rather than counted — the ones that pull a service in.
+   They wrap, because a name is long and a phone is narrow, and each keeps a
+   thumb-sized target of its own. */
+.unit-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.unit-refs > * {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A service among them has a screen of its own, so it is a link and is
+   coloured like one. A .socket or .target has nowhere to go and stays flat, in
+   the same pill, so the row still reads as one list of names. */
+.unit-refs a {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- stat tiles ---------- */
+
+/* Three facts, side by side, for the things a number answers better than a
+   sentence: how long, how much, which process. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Four figures rather than three. Two across leaves each tile wide enough for
+   a memory figure and a five-digit PID without either ellipsing. */
+.stats.pairs {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.stats > div {
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: 12px;
+}
+
+.stats .k {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats .v {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sparkline {
+  display: block;
+  width: 100%;
+  height: 44px;
+  overflow: visible;
+}
+
+.list-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px -14px;
+}
+
+/* Between rows within a card: no vertical air of its own, and it starts where
+   the rows' text does — after the status dot — rather than at the card edge. */
+.list-divider.inset {
+  margin: 0 -14px 0 19px;
+}
+
+/* --- Terminal ---------------------------------------------------------- */
+
+/* A terminal wants the whole phone. The tab bar is navigation for a screen you
+   are reading; this one is a screen you are typing at, and every row it takes
+   is a row of output. Going back is the header's job while it is open. */
+body.terminal-open .tabbar {
+  display: none;
+}
+
+/* Fixed to the viewport rather than laid out in the page: the soft keyboard
+   changes what "the viewport" means, and the terminal component keeps this in
+   step with the visual one so the prompt stays above the keyboard instead of
+   behind it. */
+.term-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.term-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(env(safe-area-inset-top) + 6px) 10px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.term-bar .back {
+  min-width: 36px;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.term-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.term-title b {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.term-title span {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.term-end {
+  flex: none;
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 14px;
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+/* The terminal itself, and the only part of the column allowed to take what is
+   left. min-height: 0 because a flex child otherwise refuses to be shorter
+   than its content, and xterm's content is however tall the scrollback is. */
+.term-stage {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.term-stage .xterm {
+  height: 100%;
+}
+
+/* While lines are being picked, the screen is a thing to drag over rather than
+   a thing to scroll: the outline says the mode is on, and touch-action keeps
+   the browser from deciding the drag was a scroll after all. */
+.term-stage.selecting {
+  touch-action: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Reconnecting is the normal state of a phone, not a failure, so it is a line
+   at the bottom of the screen rather than anything that moves the terminal. */
+.term-state {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 12px;
+  text-align: center;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.term-state.connecting {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.term-state.ended {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+/* One line between the screen and the keys — what an armed mode is waiting for,
+   or what just happened. It sits above the keys rather than over the terminal
+   because nothing here is worth covering output with. */
+.term-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 5px 12px;
+  font-size: 12px;
+  text-align: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.term-note .term-drop {
+  flex: none;
+  min-height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+}
+
+/* The clipboard's way round the long way: the box is text out of a terminal, so
+   it is set like one. */
+.term-clip {
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+/* The keys a phone keyboard does not have, directly above the one it does. */
+.term-keys {
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 6px calc(env(safe-area-inset-bottom) + 5px);
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.term-row {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  /* A row of keys that scrolls should not also bounce the terminal above it. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.term-row::-webkit-scrollbar {
+  display: none;
+}
+
+.term-key {
+  flex: 1 0 auto;
+  min-width: 38px;
+  min-height: 36px;
+  padding: 0 8px;
+  font: 500 14px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  /* The keys are for typing, not for reading: a long press should not offer to
+     select "Esc". */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.term-key:active {
+  background: var(--press-tint);
+}
+
+/* An armed modifier stays lit until the key it applies to is pressed, because
+   there is no holding a key down on a touchscreen. */
+.term-key.held {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* The keypad, for when the soft keyboard is away. The bottom of the phone is
+   free then, so the keys spread into it: three rows of four on the left, and
+   the arrows around Enter on the right, where the thumb already is. The
+   moment the keyboard comes up, the same keys fold back into the thin row. */
+.term-pad {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 2px 0 4px;
+}
+
+.term-pad-main {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.term-pad-nav {
+  display: grid;
+  grid-template-columns: minmax(40px, 46px) minmax(58px, 74px) minmax(40px, 46px);
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.term-pad-nav .up {
+  grid-area: 1 / 2;
+}
+
+.term-pad-nav .left {
+  grid-area: 2 / 1;
+}
+
+.term-pad-nav .enter {
+  grid-area: 2 / 2;
+}
+
+.term-pad-nav .right {
+  grid-area: 2 / 3;
+}
+
+.term-pad-nav .down {
+  grid-area: 3 / 2;
+}
+
+.term-pad .term-key {
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 4px;
+  font-size: 15px;
+  border-radius: 12px;
+}
+
+/* The one key whose label is a word rather than a glyph. */
+.term-pad-nav .term-key.enter {
+  font-size: 12px;
+}
+
+/* A row of links inside a card, each its own tap target. */
+.link-row {
+  display: block;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.link-row:last-of-type {
+  border-bottom: none;
+}
+
+/* How wide the terminal came out, between the two size buttons — the number
+   they exist to change. */
+.term-cols {
+  flex: none;
+  align-self: center;
+  min-width: 34px;
+  font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ---------- Claude ---------- */
+
+/* The conversation screen borrows the terminal's frame — the bar, the full
+   phone — and fills it with a chat instead of a grid of cells. */
+
+/* Worn for the whole of a session that skips permission checks, so there is
+   no moment at which it reads like an ordinary one. */
+.chat-stripe {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bad);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.chat-stripe svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.chat {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 12px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg);
+}
+
+.chat > * {
+  flex-shrink: 0;
+}
+
+.msg {
+  max-width: 92%;
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  padding: 9px 13px;
+  border-radius: 18px 18px 4px 18px;
+}
+
+.msg.claude {
+  align-self: flex-start;
+  padding: 2px 4px;
+  white-space: normal;
+}
+
+.msg.claude p {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+
+.msg.claude p:last-child {
+  margin-bottom: 0;
+}
+
+.msg.claude code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+
+.msg-code {
+  margin: 0 0 8px;
+  padding: 9px 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A command or a file operation, with what came back folded under it. */
+.cc-tool {
+  align-self: stretch;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.cc-tool.failed {
+  border-color: color-mix(in srgb, var(--bad) 50%, var(--border));
+}
+
+.cc-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+}
+
+.cc-tool-head svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--text-dim);
+}
+
+.cc-tool-what {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-tool-state {
+  font-size: 12px;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.cc-tool.failed .cc-tool-state {
+  color: var(--bad);
+}
+
+.cc-tool-body {
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 8px 12px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.cc-tool-more {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 12px;
+  text-align: left;
+}
+
+/* Claude waiting for a yes or a no: the exact command, and the buttons. */
+.ask {
+  align-self: stretch;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ask-who {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ask pre {
+  margin: 8px 0;
+  padding: 9px 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.ask-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ask-btns button {
+  flex: 1;
+  min-height: 40px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.chat-line {
+  align-self: center;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  padding: 2px 8px;
+}
+
+.chat-line.bad {
+  color: var(--bad);
+}
+
+.chat-line.ended {
+  padding: 8px;
+}
+
+.chat-working {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 2px 4px;
+}
+
+.chat-working i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  animation: chat-dot 1.2s ease-in-out infinite;
+}
+
+.chat-working i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.chat-working i:nth-child(3) {
+  animation-delay: 0.4s;
+  margin-right: 4px;
+}
+
+@keyframes chat-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.composer {
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 8px 10px calc(env(safe-area-inset-bottom) + 10px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.composer-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.composer-text {
+  flex: 1;
+  min-height: 42px;
+  max-height: 160px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 21px;
+  background: var(--surface-2);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.35;
+  resize: none;
+  field-sizing: content;
+}
+
+.composer-round {
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  flex: none;
+}
+
+.composer-round svg {
+  width: 20px;
+  height: 20px;
+}
+
+.composer-round.send {
+  background: var(--accent);
+  color: #fff;
+}
+
+.composer-round.stop {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.composer-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.composer-meta::-webkit-scrollbar {
+  display: none;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pill.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+  border-color: transparent;
+}
+
+.pill.dim {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* One choice in the model and permissions sheets: a radio, the name, a line
+   about it. */
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  font-weight: 400;
+}
+
+.opt:last-of-type {
+  border-bottom: none;
+}
+
+.opt .radio {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex: none;
+}
+
+.opt .radio.on {
+  border-color: var(--accent);
+  background: radial-gradient(circle, var(--accent) 45%, transparent 50%);
+}
+
+.opt-t {
+  display: block;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.opt-d {
+  display: block;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+.chat-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.chat-kv:last-of-type {
+  border-bottom: none;
+}
+
+.chat-kv b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* A segmented control, for a choice of three that has to be read at once. */
+.trio {
+  display: flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.trio-s {
+  flex: 1;
+  min-height: 36px;
+  padding: 6px 4px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.trio-s.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(16, 16, 32, 0.1);
+}
+
+/* A link dressed as the primary button: opening claude.ai is a navigation, and
+   a real anchor is what lets the browser open it in a new tab. */
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 11px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  margin: 12px 0 14px;
+}
+
+.btn-link.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---------- the lock screen ---------- */
+
+.main.lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding-top: 20vh;
+}
+
+.lock-logo {
+  width: 88px;
+  height: 88px;
+  border-radius: 22%;
+}
+
+.main.lock h1 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.main.lock form {
+  width: 100%;
+  max-width: 320px;
+  display: grid;
+  gap: 12px;
+}
+
+.main.lock input {
+  text-align: center;
+  font-size: 22px;
+  letter-spacing: 0.3em;
+}
+
+/* ---------- the money ---------- */
+
+.equity {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
