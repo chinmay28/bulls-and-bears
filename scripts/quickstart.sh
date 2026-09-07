@@ -54,7 +54,14 @@ case "${1:-}" in
 esac
 
 if [ "$UNINSTALL" = 1 ]; then
-
+  log "Stopping and removing the Bulls and Bears service"
+  systemctl disable --now bnb.service 2>/dev/null || true
+  rm -f "$UNIT"
+  systemctl daemon-reload
+  rm -rf "$INSTALL_DIR"
+  echo
+  log "Removed. Your data is still at $DATA_DIR (the journal, the paper book and any broker token)."
+  log "Delete it with: sudo rm -rf $DATA_DIR && sudo userdel $SERVICE_USER"
   exit 0
 fi
 
@@ -225,6 +232,8 @@ if ! id "$SERVICE_USER" >/dev/null 2>&1; then
 fi
 mkdir -p "$DATA_DIR" "$BACKUP_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
+# The data directory will hold a broker token that can place real trades.
+chmod 700 "$DATA_DIR" "$BACKUP_DIR"
 
 
 # --------------------------------------------------------------------- deploy
