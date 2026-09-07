@@ -730,3 +730,29 @@ func sortedSymbols(ps []strategy.Position) []string {
 }
 
 var _ broker.Broker = (*Book)(nil)
+
+// DailyLimitHits counts the consecutive days before `before` on which the
+// book lost at least `limit` of its opening equity, most recent first,
+// stopping at the first day that did not. It is the risk gate's "three in a
+// row" input.
+func (b *Book) DailyLimitHits(ctx context.Context, before time.Time, limit float64) (int, error) {
+	rows, err := b.db.QueryContext(ctx,
+		`SELECT opening, equity FROM equity_history WHERE day < ? ORDER BY day DESC LIMIT 30`,
+		before.UTC().Format("2006-01-02"))
+	if err != nil {
+		return 0, fmt.Errorf("paper: read daily hits: %w", err)
+	}
+	defer rows.Close()
+	hits := 0
+	for rows.Next() {
+		var open, eq float64
+		if err := rows.Scan(&open, &eq); err != nil {
+			return 0, err
+		}
+		if open <= 0 || (open-eq)/open < limit {
+			break
+		}
+		hits++
+	}
+	return hits, rows.Err()
+}

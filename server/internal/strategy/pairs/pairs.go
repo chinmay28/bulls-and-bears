@@ -354,3 +354,18 @@ func (a day) before(b day) bool {
 	}
 	return a.d < b.d
 }
+
+// Weights is the backtest engine's view of Signals: one weights map per
+// aligned bar, in order. It is what lets a backtest run in O(n) rather than
+// re-deriving the state from a growing prefix.
+func (p *Pairs) Weights(hist map[string][]bars.Bar) ([]map[string]float64, error) {
+	sig, err := p.Signals(hist)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]float64, len(sig))
+	for i, s := range sig {
+		out[i] = s.Weights
+	}
+	return out, nil
+}

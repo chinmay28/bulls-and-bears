@@ -131,9 +131,9 @@ func TestZHandComputed(t *testing.T) {
 		z       float64
 		defined bool
 	}{
-		{0, false}, // one bar
-		{0, false}, // two bars: still short of the window
-		{1, true},  // [1,2,3]: mean 2, sd 1
+		{0, false},                            // one bar
+		{0, false},                            // two bars: still short of the window
+		{1, true},                             // [1,2,3]: mean 2, sd 1
 		{(7.0 / 3) / math.Sqrt(13.0/3), true}, // [2,3,6]: mean 11/3, var (25+4+49)/9/2
 		{1 / math.Sqrt(3), true},              // [3,6,6]: mean 5, var 6/2
 		{0, false},                            // [6,6,6]: sd 0
