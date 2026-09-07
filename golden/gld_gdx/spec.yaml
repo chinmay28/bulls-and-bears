@@ -1,0 +1,30 @@
+name: gld_gdx_pairs
+version: 1
+strategy: pairs_zscore
+universe:
+- GLD
+- GDX
+params:
+  hedge_ratio: 1.6174638130283863
+  lookback: 20.0
+  entry_z: 2.0
+  exit_z: 0.5
+  max_hold_days: 27.0
+sizing:
+  gross_leverage: 0.9
+  max_notional_per_leg_usd: 2000.0
+provenance:
+  train_window:
+    from: '2015-01-01'
+    to: '2022-12-31'
+  test_window:
+    from: '2023-01-01'
+    to: '2023-06-08'
+  oos_sharpe: 1.029041444592186
+  oos_max_drawdown: -0.051450354048277136
+  cost_model:
+    commission_usd: 0.0
+    slippage_bps: 5.0
+  research_git_sha: 73a8b36
+  generated_at: '2026-09-07T14:33:09Z'
+  ttl_days: 90

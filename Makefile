@@ -11,7 +11,7 @@ VERSION_PKG := github.com/chinmay28/bulls-and-bears/server/internal/version
 PATCH := $(shell node scripts/version.mjs --patch 2>/dev/null)
 LDFLAGS := -s -w $(if $(PATCH),-X $(VERSION_PKG).Patch=$(PATCH))
 
-.PHONY: build server web icons test test-web test-icongen test-installer test-research vet lint run clean version bump-version golden parity
+.PHONY: build server web icons test test-web test-icongen test-installer test-research vet lint run clean version bump-version golden parity backtest-compare
 
 ## build: PWA into the embed directory, then the single binary
 build: web server
@@ -59,7 +59,16 @@ test-installer:
 
 ## test-research: the Python side (needs uv)
 test-research:
-	cd research && uv run pytest
+	cd research && uv run pytest && uv run ruff check . && uv run mypy --strict tt
+
+## golden: regenerate the parity fixtures from the research side (fetches from Yahoo;
+## GOLDEN_FLAGS=--synthetic uses the seeded pair instead)
+golden:
+	cd research && uv run python scripts/gld_gdx.py $(GOLDEN_FLAGS)
+
+## parity: the Go tests that hold the runtime to the research side's goldens
+parity:
+	cd server && $(GO) test -race -run 'Parity' ./internal/strategy/... ./internal/metrics/... ./internal/backtest/...
 
 vet:
 	cd server && $(GO) vet ./...
