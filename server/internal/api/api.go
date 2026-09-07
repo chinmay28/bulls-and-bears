@@ -2,10 +2,16 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
+
+	"github.com/chinmay28/bulls-and-bears/server/internal/broker/paper"
+	"github.com/chinmay28/bulls-and-bears/server/internal/risk"
+	"github.com/chinmay28/bulls-and-bears/server/internal/runner"
 )
 
 // Server holds the dependencies the handlers need.
@@ -15,6 +21,17 @@ type Server struct {
 	Version string
 	// DataDir holds the halt marker, the journal and the paper book.
 	DataDir string
+	// SpecsDir and BarsDir are where the strategies and their history live;
+	// empty when the server runs without a runner.
+	SpecsDir, BarsDir string
+	// Book is the paper account; nil when there is none.
+	Book *paper.Book
+	// Risk is the thresholds in force, for the meters.
+	Risk risk.Config
+	// RunNow performs a cycle for a run id; nil when there is no runner.
+	RunNow func(ctx context.Context, runID string) (runner.Outcome, error)
+	// RunOffset is how long before the close the scheduler fires.
+	RunOffset time.Duration
 	// Ref is the git ref a self-update builds from by default.
 	Ref string
 	// Auth is nil when Bulls and Bears runs without a PIN.
@@ -35,6 +52,18 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/halt", s.handleGetHalt)
 	mux.HandleFunc("POST /api/halt", s.handleHalt)
 	mux.HandleFunc("DELETE /api/halt", s.handleResume)
+
+	mux.HandleFunc("GET /api/strategies", s.handleListStrategies)
+	mux.HandleFunc("GET /api/strategies/{name}", s.handleGetStrategy)
+	mux.HandleFunc("POST /api/strategies/{name}/backtest", s.handleBacktest)
+	mux.HandleFunc("GET /api/bars", s.handleBars)
+
+	mux.HandleFunc("GET /api/book", s.handleBook)
+
+	mux.HandleFunc("GET /api/runs", s.handleListRuns)
+	mux.HandleFunc("GET /api/runs/{id}", s.handleGetRun)
+	mux.HandleFunc("GET /api/runs/{id}/jsonl", s.handleRunJSONL)
+	mux.HandleFunc("POST /api/run", s.handleRunNow)
 
 	return mux
 }

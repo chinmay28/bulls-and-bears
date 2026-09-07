@@ -70,6 +70,13 @@ golden:
 parity:
 	cd server && $(GO) test -race -run 'Parity' ./internal/strategy/... ./internal/metrics/... ./internal/backtest/...
 
+## backtest-compare: run the Go backtester over the golden bars and print its
+## numbers next to the Python side's metrics.json
+backtest-compare: server
+	@mkdir -p bin/golden-bars && cp golden/gld_gdx/bars_GLD.parquet bin/golden-bars/GLD.parquet && cp golden/gld_gdx/bars_GDX.parquet bin/golden-bars/GDX.parquet
+	./$(BIN) backtest -spec golden/gld_gdx/spec.yaml -bars bin/golden-bars -ignore-refusal
+	@echo "python:" && cat golden/gld_gdx/metrics.json
+
 vet:
 	cd server && $(GO) vet ./...
 

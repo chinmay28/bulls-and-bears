@@ -14,6 +14,17 @@ export function ago(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString()
 }
 
+/** "in 2h 14m", or "now" once it has passed. */
+export function until(iso: string): string {
+  const seconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000)
+  if (seconds <= 0) return 'now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `in ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return `in ${hours}h ${minutes % 60}m`
+  return `in ${Math.floor(hours / 24)}d`
+}
+
 export function time(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     month: 'short',
@@ -21,6 +32,11 @@ export function time(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+/** Time of day only, with seconds, for a journal. */
+export function clock(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 
 /** Dollars the way a statement prints them: two places, thousands separated,
@@ -38,6 +54,17 @@ export function pct(fraction: number, signed = false): string {
   const s = `${Math.abs(v).toFixed(1)}%`
   if (v < 0) return `−${s}`
   return signed && v > 0 ? `+${s}` : s
+}
+
+/** A quantity of shares: whole when whole, else to three places. */
+export function shares(n: number): string {
+  const abs = Math.abs(n)
+  return Number.isInteger(abs) ? String(abs) : abs.toFixed(3).replace(/\.?0+$/, '')
+}
+
+/** A number the way a spec prints it: up to four places, no trailing zeros. */
+export function num(n: number, places = 4): string {
+  return n.toFixed(places).replace(/\.?0+$/, '')
 }
 
 export function percent(used: number, total: number): number {

@@ -6,7 +6,23 @@ until someone has completed the desktop OAuth flow and called `tools/list`.
 
 ## Status
 
-Not started. `tools/list` has not been called; `docs/discovery/` is empty.
+Not started: `tools/list` has not been called and `docs/discovery/` is
+empty. The tooling for it exists. On a machine with a browser:
+
+```sh
+bnb login -data ~/bnb-data                # OAuth in the browser; writes robinhood-token.json
+bnb discover -data ~/bnb-data -out docs/discovery/tools_list.json
+```
+
+`login` follows the MCP authorization flow (the 401 challenge, the protected
+resource metadata, the authorization server's metadata, dynamic client
+registration, PKCE, a localhost redirect) and writes the token, 0600, into
+the data directory. `discover` initializes against the server with it and
+prints `tools/list`. Copy the token file to the trading machine's data
+directory afterwards; the refresh is headless.
+
+Once the JSON is in, fill the questions below in and record the sample
+request/response pairs under `docs/discovery/samples/`.
 
 ## Open questions (from `docs/PLAN.md` §10)
 

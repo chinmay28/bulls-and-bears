@@ -230,8 +230,13 @@ if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   log "Creating the $SERVICE_USER system user"
   useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
 fi
-mkdir -p "$DATA_DIR" "$BACKUP_DIR"
+mkdir -p "$DATA_DIR" "$BACKUP_DIR" "$DATA_DIR/bars"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
+# The gate's thresholds, if the operator has written their own.
+RISK_FILE=""
+if [ -f "$DATA_DIR/risk.yaml" ]; then
+  RISK_FILE="$DATA_DIR/risk.yaml"
+fi
 # The data directory will hold a broker token that can place real trades.
 chmod 700 "$DATA_DIR" "$BACKUP_DIR"
 
@@ -277,8 +282,11 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$DATA_DIR
-ExecStart=$INSTALL_DIR/bnb -addr :$PORT -data $DATA_DIR
+ExecStart=$INSTALL_DIR/bnb -addr :$PORT -data $DATA_DIR -specs $BUILD_DIR/specs -bars $DATA_DIR/bars
 Environment=BNB_PIN=$PIN
+# A risk.yaml in the data directory overrides the plan's default thresholds;
+# copy risk.example.yaml there to start from the defaults.
+Environment=BNB_RISK=$RISK_FILE
 Environment=BNB_REPO=$REPO
 Environment=BNB_REF=$REF
 Restart=on-failure
@@ -369,8 +377,9 @@ echo
 log "Bulls and Bears $VERSION ($REVISION) is running"
 echo "     http://$ADDRESS:$PORT  (also http://$(hostname).local:$PORT if mDNS is set up)"
 echo
-echo "     It runs dry: nothing is placed anywhere until a broker is connected from Settings,"
-echo "     and even then only in the Robinhood Agentic account."
+echo "     It runs dry: orders fill on paper against the newest bar in $DATA_DIR/bars,"
+echo "     and nothing reaches a broker until one is connected. Put bars there with"
+echo "     research/scripts/gld_gdx.py, and a risk.yaml in $DATA_DIR to change the limits."
 echo
 if [ -z "$PIN" ]; then
   echo "     No PIN is set: anyone who can reach that address can halt or resume trading."

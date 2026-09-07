@@ -1,4 +1,4 @@
-import type { HaltStatus, Overview, SelfInfo } from './types'
+import type { Backtest, BarsInfo, Book, HaltStatus, Overview, Run, RunDetail, SelfInfo, Strategy } from './types'
 
 /** ApiError carries the server's message so the UI can show it verbatim. */
 export class ApiError extends Error {
@@ -40,4 +40,19 @@ export const api = {
   /** Stop trading. The marker stays until resume, whatever else happens. */
   halt: (reason: string) => request<HaltStatus>('/api/halt', { method: 'POST', ...json({ reason }) }),
   resume: () => request<HaltStatus>('/api/halt', { method: 'DELETE' }),
+
+  strategies: () => request<Strategy[]>('/api/strategies'),
+  strategy: (name: string) => request<Strategy>(`/api/strategies/${encodeURIComponent(name)}`),
+  /** Replays the spec over the bars on disk from its test window; the same
+   *  run `bnb backtest` does. */
+  backtest: (name: string) =>
+    request<Backtest>(`/api/strategies/${encodeURIComponent(name)}/backtest`, { method: 'POST' }),
+  bars: () => request<BarsInfo[]>('/api/bars'),
+
+  book: () => request<Book>('/api/book'),
+
+  runs: () => request<Run[]>('/api/runs'),
+  run: (id: string) => request<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
+  /** Today's cycle, now. Harmless in dry-run; a trading decision in live. */
+  runNow: () => request<{ run: Run }>('/api/run', { method: 'POST' }),
 }

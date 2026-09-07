@@ -82,7 +82,7 @@ def fetch(
                 threads=False,
             )
             break
-        except Exception as e:  # noqa: BLE001 - yfinance raises a zoo of types
+        except Exception as e:  # yfinance raises a zoo of types
             last = e
             sleep(backoff**attempt)
     else:

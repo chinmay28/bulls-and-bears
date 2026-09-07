@@ -75,8 +75,19 @@ Golden `equity_curve.csv` columns: `date`, `equity`. Golden `metrics.json`:
 
 ## Backtest engine (Python and `bnb backtest`)
 
-Both run the same daily loop over the aligned bars: at each bar's close,
-compute targets from history up to and including that bar, and rebalance to
-them at that bar's `adjclose` with the spec's cost model applied to the
-notional traded (`slippage_bps` of notional, plus `commission_usd` per
-order). Returns accrue from the next bar. Starting equity is 10,000.
+Both run the same daily loop over the aligned bars. The strategy is replayed
+over the **whole** history it is given, so its state at the first traded bar
+is what the runtime's would be; the book opens at the first bar on or after
+the spec's `test_window.from`. Per bar, in this order, with `p` the bar's
+`adjclose` per symbol and `w` the bar's target weights:
+
+1. `equity = cash + Σ shares · p` (yesterday's shares at today's close)
+2. `target_shares = w · equity / p`; `delta = target_shares − shares`
+3. `traded = Σ |delta| · p`; `orders` = number of symbols with `delta ≠ 0`
+4. `cost = traded · slippage_bps / 10 000 + commission_usd · orders`
+5. `cash = cash − Σ delta · p − cost`; `shares = target_shares`
+6. record `equity_after = cash + Σ shares · p` for the bar
+
+Starting cash is 10,000. Fractional shares are assumed. The golden
+`equity_curve.csv` is this `equity_after` series and the two engines agree
+on it to `1e-6`.
