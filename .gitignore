@@ -10,13 +10,14 @@ server/internal/web/dist/
 
 # Runtime data: the halt marker, the journal, the paper book and, later, the
 # broker token. Never commit any of it.
-data/
+/data/
 *.db
 *.db-wal
 *.db-shm
 
 # Market data is fetched, not committed; goldens under golden/ are.
 research/data/
+research/out/
 research/.venv/
 research/**/__pycache__/
 .pytest_cache/
