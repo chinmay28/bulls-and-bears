@@ -2,7 +2,7 @@
 
 # Bulls and Bears
 
-**Small bets, honest books.** A personal algorithmic trading toolkit, built
+**The agentic trading toolkit.** A personal algorithmic trading system, built
 around Ernie Chan's loop: borrow a simple strategy, backtest it honestly, size
 it at half-Kelly, paper-trade it against the backtest, then go live small. The
 research lives in Python; the thing that runs unattended is a single Go

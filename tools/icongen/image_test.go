@@ -153,3 +153,13 @@ func TestPadCentresOnTheGround(t *testing.T) {
 		}
 	}
 }
+
+func TestEraseCoversOnlyTheRectangle(t *testing.T) {
+	out := Erase(artwork(), image.Rect(0, 8, 10, 10), navy)
+	if got := out.RGBAAt(5, 9); got != navy {
+		t.Errorf("inside the band = %v, want navy", got)
+	}
+	if got := out.RGBAAt(3, 3); got != ink {
+		t.Errorf("above the band = %v, want the artwork untouched", got)
+	}
+}
