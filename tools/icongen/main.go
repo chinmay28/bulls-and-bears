@@ -21,22 +21,23 @@ import (
 	"path/filepath"
 )
 
-// tile is the colour behind the circle on an icon. The logo is drawn on white
-// paper; the paper is painted over with this before cropping, so the icons'
-// corners belong to the app rather than to the page it was drawn on. It is the
-// PWA's dark background, so the tile reads the same as the app opening.
-var tile = color.RGBA{R: 0x0b, G: 0x0b, B: 0x0f, A: 0xff}
+// focus is where the icons look: the middle of the two animals, in the
+// logo's own pixels. Each icon is a square around it.
+var focus = image.Point{X: 640, Y: 460}
 
-// focus is where the icons look: the centre of the circle, in the logo's own
-// pixels. Each icon is a square around it.
-var focus = image.Point{X: 628, Y: 472}
+// wordmarkTop is the row the wordmark starts on. The icons are the animals
+// alone — a wordmark is mush at 30 px — so everything from here down is
+// painted over with the page colour before the crop.
+const wordmarkTop = 800
 
 // The corner radius of an iOS-style tile, as a fraction of its side.
 const tileRadius = 0.2237
 
-// logoSize is the side of logo.png, the whole drawing on a transparent
-// background: the app throws it over a blurred screen when the header's mark
-// is double-tapped, and nothing larger than this is ever shown.
+// logoSize is the side of logo.png, the whole drawing as a rounded tile: the
+// app throws it over a blurred screen when the header's mark is double-tapped,
+// and nothing larger than this is ever shown. The drawing is on black paper
+// with glows that fade into it, so the paper stays — cutting it out would
+// leave a dark halo — and the tile's corners are rounded instead.
 const logoSize = 800
 
 // targets are the files written. Each shape suits a different consumer:
@@ -54,10 +55,10 @@ var targets = []struct {
 	// margin instead.
 	inset float64
 }{
-	{"icon-192.png", 192, 800, true, 1},
-	{"icon-512.png", 512, 800, true, 1},
-	{"apple-touch-icon.png", 180, 800, false, 1},
-	{"icon-512-maskable.png", 512, 800, false, 0.78},
+	{"icon-192.png", 192, 1100, true, 1},
+	{"icon-512.png", 512, 1100, true, 1},
+	{"apple-touch-icon.png", 180, 1100, false, 1},
+	{"icon-512-maskable.png", 512, 1100, false, 0.78},
 }
 
 func main() {
@@ -82,14 +83,19 @@ func run(in, out string) error {
 		return fmt.Errorf("%s: %w", in, err)
 	}
 
-	if err := write(filepath.Join(out, "logo.png"), Scale(Matte(logo, color.RGBA{}), logoSize)); err != nil {
+	full := Scale(logo, logoSize)
+	RoundCorners(full, tileRadius/2)
+	if err := write(filepath.Join(out, "logo.png"), full); err != nil {
 		return err
 	}
 	fmt.Println("wrote", filepath.Join(out, "logo.png"))
 
-	matted := Matte(logo, tile)
+	// The page colour is whatever the drawing's corner is: the padding around
+	// a crop and the erased wordmark band must be seamless with it.
+	tile := color.RGBAModel.Convert(logo.At(logo.Bounds().Min.X, logo.Bounds().Min.Y)).(color.RGBA)
+	animals := Erase(logo, image.Rect(logo.Bounds().Min.X, wordmarkTop, logo.Bounds().Max.X, logo.Bounds().Max.Y), tile)
 	for _, t := range targets {
-		icon := Scale(CropSquare(matted, focus, t.box, tile), int(float64(t.size)*t.inset+0.5))
+		icon := Scale(CropSquare(animals, focus, t.box, tile), int(float64(t.size)*t.inset+0.5))
 		if t.inset < 1 {
 			icon = Pad(icon, t.size, tile)
 		}

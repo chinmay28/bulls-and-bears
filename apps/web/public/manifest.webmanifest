@@ -1,7 +1,7 @@
 {
   "name": "Bulls and Bears",
   "short_name": "Bulls and Bears",
-  "description": "Small bets, honest books",
+  "description": "The agentic trading toolkit",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

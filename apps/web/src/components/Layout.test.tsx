@@ -43,7 +43,7 @@ describe('the header', () => {
     expect(logo()).toBeNull()
     act(() => mark().click())
     expect(logo()).not.toBeNull()
-    expect(document.body.textContent).toContain('Small bets, honest books')
+    expect(document.body.textContent).toContain('The agentic trading toolkit')
   })
 
   it('clears the logo when the overlay is tapped', () => {

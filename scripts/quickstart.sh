@@ -272,7 +272,7 @@ chmod 755 "$INSTALL_DIR/bnb"
 log "Writing $UNIT"
 cat > "$UNIT" <<UNIT_EOF
 [Unit]
-Description=Bulls and Bears — small bets, honest books
+Description=Bulls and Bears — the agentic trading toolkit
 Documentation=https://github.com/chinmay28/bulls-and-bears
 After=network-online.target
 Wants=network-online.target

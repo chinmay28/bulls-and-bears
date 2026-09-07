@@ -155,3 +155,12 @@ func Pad(src image.Image, size int, ground color.RGBA) *image.RGBA {
 	draw.Draw(dst, b.Sub(b.Min).Add(off), src, b.Min, draw.Src)
 	return dst
 }
+
+// Erase paints a rectangle of the image in one colour, on a copy.
+func Erase(src image.Image, r image.Rectangle, c color.RGBA) *image.RGBA {
+	b := src.Bounds()
+	dst := image.NewRGBA(b)
+	draw.Draw(dst, b, src, b.Min, draw.Src)
+	draw.Draw(dst, r.Intersect(b), image.NewUniform(c), image.Point{}, draw.Src)
+	return dst
+}
