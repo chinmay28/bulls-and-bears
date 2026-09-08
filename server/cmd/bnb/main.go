@@ -40,6 +40,7 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/marketdata/yahoo"
 	"github.com/chinmay28/bulls-and-bears/server/internal/mcp"
 	"github.com/chinmay28/bulls-and-bears/server/internal/mcp/oauth"
+	"github.com/chinmay28/bulls-and-bears/server/internal/research"
 	"github.com/chinmay28/bulls-and-bears/server/internal/risk"
 	"github.com/chinmay28/bulls-and-bears/server/internal/runner"
 	"github.com/chinmay28/bulls-and-bears/server/internal/sched"
@@ -61,6 +62,7 @@ func main() {
 // tradingFlags are shared by the server and `bnb run`: where everything is.
 type tradingFlags struct {
 	dataDir, specsDir, barsDir, riskPath string
+	researchDir                          string
 	startingCash                         float64
 	spreadBps                            float64
 	allowMixed                           bool
@@ -73,6 +75,7 @@ func addTradingFlags(fs *flag.FlagSet) *tradingFlags {
 	fs.StringVar(&t.specsDir, "specs", envOr("BNB_SPECS", "specs"), "directory of strategy specs (*.yaml)")
 	fs.StringVar(&t.barsDir, "bars", envOr("BNB_BARS", ""), "directory of daily bars (<SYMBOL>.parquet); default <data>/bars")
 	fs.StringVar(&t.riskPath, "risk", envOr("BNB_RISK", ""), "risk.yaml with the gate's thresholds; default: the plan's defaults")
+	fs.StringVar(&t.researchDir, "research", envOr("BNB_RESEARCH", ""), "the research/ tree the app can run studies from; default: beside the specs directory")
 	fs.Float64Var(&t.startingCash, "starting-cash", 10_000, "cash the paper book opens with, the first time only")
 	fs.Float64Var(&t.spreadBps, "replay-spread-bps", 4, "bid-ask spread the replay quote source puts around the last close")
 	fs.BoolVar(&t.allowMixed, "allow-mixed-sources", false, "accept a symbol whose bars mix sources")
@@ -83,6 +86,12 @@ func addTradingFlags(fs *flag.FlagSet) *tradingFlags {
 func (t *tradingFlags) finish() error {
 	if t.barsDir == "" {
 		t.barsDir = filepath.Join(t.dataDir, "bars")
+	}
+	if t.researchDir == "" {
+		// The checkout keeps specs/ and research/ side by side, and the
+		// installer points -specs into the checkout, so this finds the tree
+		// on an installed machine and in a development checkout alike.
+		t.researchDir = filepath.Join(filepath.Dir(filepath.Clean(t.specsDir)), "research")
 	}
 	// The data directory holds a broker token one day; it is private from the
 	// start rather than tightened later.
@@ -161,6 +170,12 @@ func run(args []string) error {
 		// known to serve history. The fetch is on demand only: nothing here
 		// reaches the network unless the operator asks it to.
 		Fetcher: &yahoo.Client{HTTP: &http.Client{Timeout: 30 * time.Second}},
+		// The studies run from the phone with their output pointed at the
+		// directories above; uv is downloaded if the machine has none.
+		Research: &research.Runner{
+			Dir: t.researchDir, DataDir: t.dataDir, SpecsDir: t.specsDir, BarsDir: t.barsDir,
+			Installer: &research.Installer{Client: &http.Client{Timeout: 10 * time.Minute}}, Log: log,
+		},
 	}
 
 	loop := &sched.Loop{
@@ -194,7 +209,7 @@ func run(args []string) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("bnb listening", "version", apiSrv.Version, "addr", *addr, "data", t.dataDir, "specs", t.specsDir, "bars", t.barsDir,
+		log.Info("bnb listening", "version", apiSrv.Version, "addr", *addr, "data", t.dataDir, "specs", t.specsDir, "bars", t.barsDir, "research", t.researchDir,
 			"auth", authMode(auth), "halted", halt.Halted(t.dataDir))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err

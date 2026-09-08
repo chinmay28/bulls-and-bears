@@ -210,7 +210,7 @@ run_installer > "$SANDBOX/install.log" 2>&1 || {
 
 [ -x "$SANDBOX/opt/bnb" ] || fail "binary not installed"
 [ -f "$SANDBOX/bnb.service" ] || fail "unit file not written"
-grep -q "ExecStart=$SANDBOX/opt/bnb -addr :$PORT -data $SANDBOX/data -specs $SANDBOX/opt/src/specs -bars $SANDBOX/data/bars" "$SANDBOX/bnb.service" ||
+grep -q "ExecStart=$SANDBOX/opt/bnb -addr :$PORT -data $SANDBOX/data -specs $SANDBOX/data/specs -bars $SANDBOX/data/bars -research $SANDBOX/opt/src/research" "$SANDBOX/bnb.service" ||
   fail "unit file has the wrong ExecStart"
 grep -q 'NoNewPrivileges=yes' "$SANDBOX/bnb.service" || fail "unit file lost its hardening"
 curl -fsS --max-time 3 "http://127.0.0.1:$PORT/api/health" >/dev/null ||

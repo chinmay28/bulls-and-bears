@@ -157,9 +157,17 @@ def main() -> int:
     ap.add_argument("--train-to", type=dt.date.fromisoformat, default=dt.date(2013, 12, 31),
                     help="last day of the training window (default 2013-12-31)")
     ap.add_argument("--golden", default=str(REPO_ROOT / "golden" / NAME))
+    # Where the outputs go. The defaults are the checkout's; the app points
+    # them at the runtime's own directories when it runs this.
+    ap.add_argument("--specs-dir", type=Path, default=REPO_ROOT / "specs",
+                    help="where a promoted spec is written")
+    ap.add_argument("--bars-dir", type=Path, default=REPO_ROOT / "research" / "data" / "bars",
+                    help="where the fetched bars are written as Parquet")
+    ap.add_argument("--out-dir", type=Path, default=REPO_ROOT / "research" / "out",
+                    help="where a rejected spec is written")
     args = ap.parse_args()
 
-    data_dir = REPO_ROOT / "research" / "data" / "bars"
+    data_dir = args.bars_dir
     if args.csv_dir:
         bars = load_csv_dir(args.csv_dir, pd.Timestamp.now(tz="UTC"))
         source_note = f"Kaggle 'Huge Stock Market Dataset' CSVs from {args.csv_dir.name}/ (adjusted; ends 2017-11)"
@@ -224,11 +232,11 @@ def main() -> int:
         commission_usd=COSTS.commission_usd, slippage_bps=COSTS.slippage_bps,
     )
     if oos.sharpe >= 1.0 and real:
-        out = REPO_ROOT / "specs" / f"{NAME}.yaml"
+        out = args.specs_dir / f"{NAME}.yaml"
         write_spec(spec, out)
         print(f"PROMOTED: wrote {out}")
     else:
-        out = REPO_ROOT / "research" / "out" / f"{NAME}.rejected.yaml"
+        out = args.out_dir / f"{NAME}.rejected.yaml"
         write_spec(spec, out)
         why_not = f"OOS Sharpe {oos.sharpe:.2f} < 1.0" if oos.sharpe < 1.0 else "not Yahoo data"
         print(f"NOT PROMOTED ({why_not}): wrote {out}")

@@ -206,3 +206,66 @@ export interface Overview {
   nextRun: { runId: string; at: string; earlyClose: boolean } | null
   limits: { dailyLossLimit: number; drawdownKillSwitch: number; maxOrdersPerDay: number }
 }
+
+/** What the machine has for running research from the app. */
+export interface ResearchEnv {
+  /** The research tree (the checkout's research/), and whether it is there. */
+  dir: string
+  tree: boolean
+  /** The uv binary a job would use; empty until one is found or installed. */
+  uv: string
+  /** Whether the Python environment has been built at least once. */
+  synced: boolean
+  venv: string
+  /** A job is running now. */
+  busy: boolean
+}
+
+export interface Study {
+  name: string
+  title: string
+  description: string
+  script: string
+  /** Set when the study takes a training-window end date. */
+  defaultTrainTo?: string
+}
+
+export type JobStatus = 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'
+
+export interface JobStep {
+  name: string
+  command: string
+  status: JobStatus
+  started: string
+  ended?: string
+}
+
+export interface ResearchJob {
+  id: string
+  kind: 'setup' | 'run' | ''
+  study?: string
+  options: { trainTo?: string }
+  status: JobStatus
+  started: string
+  ended?: string
+  error?: string
+  steps: JobStep[]
+  /** What the study said about its spec, once it has. */
+  outcome?: { promoted: boolean; line: string }
+  logBytes: number
+}
+
+export interface ResearchInfo {
+  env: ResearchEnv
+  studies: Study[]
+  current: ResearchJob | null
+  recent: ResearchJob[]
+  /** Every job with a log on disk, newest first. */
+  logs: string[]
+}
+
+export interface JobLog {
+  job: ResearchJob
+  log: string
+  next: number
+}

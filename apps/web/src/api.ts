@@ -3,8 +3,11 @@ import type {
   BarsInfo,
   Book,
   HaltStatus,
+  JobLog,
   Overview,
   RefillResult,
+  ResearchInfo,
+  ResearchJob,
   Run,
   RunDetail,
   SelfInfo,
@@ -73,6 +76,19 @@ export const api = {
     request<RefillResult[]>('/api/bars/refresh', { method: 'POST', ...json({ symbols: symbols ?? [] }) }),
 
   book: () => request<Book>('/api/book'),
+
+  research: () => request<ResearchInfo>('/api/research'),
+  /** Finds or installs uv and builds the Python environment; returns at once. */
+  researchSetup: () => request<ResearchJob>('/api/research/setup', { method: 'POST' }),
+  /** Runs a study with its output pointed at this machine's specs and bars.
+   *  The spec is promoted only if the study's own gate passes it. */
+  researchRun: (study: string, trainTo?: string) =>
+    request<ResearchJob>('/api/research/runs', { method: 'POST', ...json({ study, trainTo: trainTo ?? '' }) }),
+  /** The job and its log from a byte offset, so polling only carries what is new. */
+  researchJob: (id: string, from = 0) =>
+    request<JobLog>(`/api/research/jobs/${encodeURIComponent(id)}?from=${from}`),
+  researchCancel: (id: string) =>
+    request<ResearchJob>(`/api/research/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   runs: () => request<Run[]>('/api/runs'),
   run: (id: string) => request<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),

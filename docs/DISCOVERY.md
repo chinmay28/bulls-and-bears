@@ -96,3 +96,46 @@ it says nothing about 2018–2026, the years in which gold's outperformance of
 equities was strongest. The verdict it reaches (the contrarian ratio rule
 does not clear the Sharpe floor) is over 2005–2017 only and is recorded as
 such in the strategy document and in the rejected spec's provenance.
+
+## Research from the app
+
+The plan (§1, §3) keeps research in Python on a workstation and the runtime
+in Go on the homelab, joined by the spec files research emits. That is still
+the division of labour; what changed is where the Python runs. The Research
+tab (`server/internal/research`, `POST /api/research/runs`) runs the studies
+under `research/scripts` on the trading machine itself: `uv sync --frozen`
+against the checkout the installer already keeps at `/opt/bnb/src`, then the
+script, with `--specs-dir`, `--bars-dir` and `--out-dir` pointed at the
+runtime's own directories. The reason is the one every other adaptation here
+gives: the phone is how this system is operated, and "run the study again
+now that Yahoo has this month's bars" was otherwise a laptop job.
+
+What keeps this inside the plan's principles:
+
+- **The gate is the script's.** A study promotes a spec only when its own
+  out-of-sample Sharpe clears 1.0 on real data, exactly as from a terminal;
+  the runtime then judges the file as it judges any other. The app cannot
+  arm a spec the research would have rejected.
+- **Nothing in the trading path changes.** The runner is a subprocess with a
+  log; the daily cycle does not know it exists. Research is one job at a
+  time, so two syncs of one environment cannot race and a study cannot pile
+  onto a trading run.
+- **The service stays read-only outside its data directory.** uv's
+  environment, cache and any Python it has to download, the rejected specs,
+  the goldens and the logs all live under `<data>/research`; the research
+  tree is only read (`PYTHONDONTWRITEBYTECODE` keeps Python from trying).
+  Specs moved into the data directory for the same reason (below).
+- **uv is installed, not assumed.** The installer puts `uv` on the machine;
+  where it could not, the runner downloads the release archive for its
+  platform, checks it against the published sha256, and keeps it in
+  `<data>/research/bin`. Trust in the publisher is the same the installer
+  already extends to Go and Node.
+
+### Specs live in the data directory
+
+The installer used to point `-specs` into the checkout, which the unit's
+`ProtectSystem=strict` makes read-only: a spec imported from the phone had
+nowhere to land. `-specs` is now `<data>/specs`, seeded from the checkout's
+`specs/*.yaml` on install and upgrade without overwriting what is already
+there — the operator's imports and the specs studies promote survive an
+upgrade, and the checkout's specs still arrive.

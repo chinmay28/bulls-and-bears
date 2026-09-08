@@ -172,6 +172,17 @@ if [ "$need_node" = 1 ]; then
   apt-get install -y -qq nodejs >/dev/null
 fi
 
+# uv runs the Python research studies the app can start from its Research
+# tab. Its own installer puts a single static binary in place; if this step
+# cannot, the app downloads one into the data directory when a study is first
+# run, so a failure here is a warning and not the end.
+if ! command -v uv >/dev/null; then
+  log "Installing uv (for the research studies the app can run)"
+  curl -LsSf --retry 3 https://astral.sh/uv/install.sh |
+    env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh >/dev/null 2>&1 ||
+    warn "Could not install uv; the app will download its own when a study is first run."
+fi
+
 # --------------------------------------------------------------------- source
 
 # The build needs the whole commit graph, not just the tip: the version number's
@@ -230,7 +241,17 @@ if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   log "Creating the $SERVICE_USER system user"
   useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
 fi
-mkdir -p "$DATA_DIR" "$BACKUP_DIR" "$DATA_DIR/bars"
+# Specs live in the data directory, the one place the hardened service can
+# write, so a spec imported from the phone or promoted by a study run there
+# has somewhere to land. The checkout's specs seed it; a spec already there —
+# the operator's, or one an earlier run promoted — is never overwritten.
+SPECS_DIR="$DATA_DIR/specs"
+mkdir -p "$DATA_DIR" "$BACKUP_DIR" "$DATA_DIR/bars" "$SPECS_DIR"
+for spec in "$BUILD_DIR"/specs/*.yaml; do
+  if [ -f "$spec" ] && [ ! -e "$SPECS_DIR/$(basename "$spec")" ]; then
+    cp "$spec" "$SPECS_DIR/"
+  fi
+done
 chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
 # The gate's thresholds, if the operator has written their own.
 RISK_FILE=""
@@ -282,7 +303,7 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$DATA_DIR
-ExecStart=$INSTALL_DIR/bnb -addr :$PORT -data $DATA_DIR -specs $BUILD_DIR/specs -bars $DATA_DIR/bars
+ExecStart=$INSTALL_DIR/bnb -addr :$PORT -data $DATA_DIR -specs $SPECS_DIR -bars $DATA_DIR/bars -research $BUILD_DIR/research
 Environment=BNB_PIN=$PIN
 # A risk.yaml in the data directory overrides the plan's default thresholds;
 # copy risk.example.yaml there to start from the defaults.
@@ -378,8 +399,9 @@ log "Bulls and Bears $VERSION ($REVISION) is running"
 echo "     http://$ADDRESS:$PORT  (also http://$(hostname).local:$PORT if mDNS is set up)"
 echo
 echo "     It runs dry: orders fill on paper against the newest bar in $DATA_DIR/bars,"
-echo "     and nothing reaches a broker until one is connected. Put bars there with"
-echo "     research/scripts/gld_gdx.py, and a risk.yaml in $DATA_DIR to change the limits."
+echo "     and nothing reaches a broker until one is connected. The Research tab runs"
+echo "     the studies under research/scripts on this machine and installs a spec that"
+echo "     earns it; a risk.yaml in $DATA_DIR changes the limits."
 echo
 if [ -z "$PIN" ]; then
   echo "     No PIN is set: anyone who can reach that address can halt or resume trading."
