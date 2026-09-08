@@ -31,6 +31,46 @@ the values agree bit for bit. Python: `tt.data.adjust`; Go: `bars.AdjustFactor`,
 `bars.AdjustedOpen`, `bars.AdjustedHigh`, `bars.AdjustedLow`. The stored bar
 schema is unchanged.
 
+## Indicators
+
+The rolling calculations the strategies below share, defined once and
+implemented in `research/tt/indicators` and `server/internal/indicator`
+from this text. Every function is pure, takes one series oldest first, and
+returns one value per bar; "undefined" is NaN in Python and a false
+`defined` flag in Go, and a strategy treats an undefined value as "stay
+flat". A window "of L ending at t" is the values at `t−L+1 … t`, inclusive.
+`golden/indicators/` holds a synthetic series and every indicator's output
+from the Python side; the Go tests reproduce them to `1e-9`.
+
+- **Rolling mean, sample sd, z-score** of a series `x`: over the window of
+  L ending at t; sd with ddof = 1; undefined for `t < L−1`. The z-score is
+  `(x_t − mean_t) / sd_t`, undefined where the sd is exactly 0. (L ≥ 2.)
+- **Rolling return** of a price `p` over L bars: `p_t / p_{t−L} − 1`,
+  undefined for `t < L`. (L ≥ 1.)
+- **SMA** of a price over L bars: `(C_t − C_{t−L}) / L` from the running sum
+  `C` (`C_{−1} = 0`), undefined for `t < L−1`, evaluated in that order on
+  both sides so a price exactly on its average reads the same.
+- **Donchian channels** over L bars use the **prior** bars only:
+  `upper_t = max(adjhigh_{t−L} … adjhigh_{t−1})`,
+  `lower_t = min(adjlow_{t−L} … adjlow_{t−1})`, undefined for `t < L`.
+  The current bar is never in its own channel.
+- **Realised volatility** over L bars: the sample sd (ddof = 1) of the
+  daily simple returns `r_u = p_u / p_{u−1} − 1` over the window of L
+  returns ending at t (`u = t−L+1 … t`), undefined for `t < L`; not
+  annualised. Zero is a defined value; a strategy that divides by it treats
+  it as ineligible.
+- **True range** at t ≥ 1: `max(adjhigh_t − adjlow_t, |adjhigh_t −
+  adjclose_{t−1}|, |adjlow_t − adjclose_{t−1}|)`; undefined at t = 0.
+  **ATR** over N: the plain mean of the first N true ranges (t = 1 … N) at
+  t = N, then `(ATR_{t−1} · (N−1) + TR_t) / N`; undefined for t < N.
+- **Wilder RSI** over N (N ≥ 1): `d_t = p_t − p_{t−1}`, `gain_t = max(d_t,
+  0)`, `loss_t = max(−d_t, 0)`. At t = N the average gain and loss are the
+  plain means of `gain_1 … gain_N` and `loss_1 … loss_N`; after that
+  `avg_t = (avg_{t−1} · (N−1) + new_t) / N` for each. Then, in this order:
+  if `avg_loss = 0` and `avg_gain > 0`, RSI = 100; if both are 0, RSI = 50;
+  otherwise `RS = avg_gain / avg_loss` and `RSI = 100 − 100 / (1 + RS)`.
+  Undefined for t < N.
+
 ## `pairs_zscore`
 
 Universe is exactly two symbols, `[A, B]`, in spec order. Params:
