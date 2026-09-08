@@ -7,15 +7,28 @@ functions and the golden files. It never talks to a broker, and nothing here
 runs unattended.
 
 ```
-tt/data/        bars.py (the §4.1 Parquet schema), yahoo.py, checks.py, synthetic.py
+tt/data/        bars.py (the §4.1 Parquet schema), yahoo.py, checks.py, synthetic.py,
+                adjust.py (adjusted open/high/low from adjclose/close)
 tt/stats/       adf, engle_granger, johansen, halflife_ar1, kelly
-tt/backtest/    engine.py, metrics.py, walkforward.py
-tt/strategies/  pairs.py, ratio.py, trend.py, momentum.py — one strategy each, per docs/CONTRACTS.md
-tt/study.py     what every study script shares: flags, data, windows, the verdict
+tt/indicators/  rolling mean/sd/z-score/return, SMA, Donchian, realised vol, ATR, Wilder RSI —
+                the calculations the strategies share, per docs/CONTRACTS.md "Indicators"
+tt/backtest/    engine.py (same-close and next-open fills), metrics.py, walkforward.py
+tt/strategies/  pairs.py, ratio.py, trend.py, momentum.py, time_series_momentum.py,
+                donchian.py, risk_parity.py, rsi2.py — one strategy each, per docs/CONTRACTS.md
+tt/studies/     a sweep two scripts share (dual_momentum.py: dual momentum and sector rotation)
+tt/study.py     what every study script shares: flags, data, windows, the sweep record,
+                the cost stress, the verdict
 tt/spec.py      writes specs (validated against specs/strategy.schema.json) and goldens
-scripts/        gld_gdx.py (pairs), etf_gld_ratio.py, sma_trend.py, dual_momentum.py — one
-                study each; docs/strategies/ has the write-up of each
+scripts/        one study each, docs/strategies/ has the write-up of each:
+                  gld_gdx.py (pairs), etf_gld_ratio.py, sma_trend.py, dual_momentum.py
+                  time_series_momentum.py, donchian_breakout.py, risk_parity_trend.py,
+                  rsi2_reversion.py, sector_rotation.py
+                golden_next_open.py and golden_indicators.py write the engine and indicator
+                parity fixtures from synthetic series (no network)
 ```
+
+docs/strategies/SOURCES.md is the catalogue of where every strategy was
+borrowed from and what was surveyed and set aside.
 
 ## Running it
 
@@ -40,7 +53,13 @@ directories. A study refuses a test window under 252 bars.
 
 Each script promotes its spec (`specs/gld_gdx_pairs.yaml`, `specs/etf_gld_ratio.yaml`) only when the out-of-sample
 Sharpe clears 1.0 on real data; otherwise the spec goes to `research/out/` as
-rejected, so the runtime never sees a strategy that did not earn it. The
+rejected, so the runtime never sees a strategy that did not earn it. Every
+study also leaves its whole sweep (`sweep.csv`), its out-of-sample numbers
+(`oos.json`) and a slippage stress with the neighbouring parameter sets
+(`robustness.json`) under `research/out/<study>/<stamp>/`, so a result can
+be audited without re-running it. The spec records which fill the numbers
+were earned with (`execution.fill_at`; the newer studies use `next_open`)
+and which study produced it (`provenance.research_study`). The
 goldens under `golden/gld_gdx/` and `golden/etf_gld_ratio/` are written either
 way, because parity between the two implementations is worth checking whether
 or not the strategy is any good. `make golden` and `make golden-ratio` run the

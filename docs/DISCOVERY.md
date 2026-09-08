@@ -200,3 +200,23 @@ backtest- and research-only until the open session is built. That is the
 next runtime task: `sched.Session` gains an open, `sched.Loop` a second fire
 time, the runner a phase that skips the quote bar and arms only the specs
 whose fill matches, and run ids distinguish the two sessions.
+
+## The strategy expansion, and the data it was first run on
+
+The expansion plan's first wave — `time_series_momentum`,
+`donchian_breakout`, `risk_parity_trend`, `rsi2_reversion` and the
+`sector_rotation` study — was built in the same sandbox as the ratio study:
+Yahoo unreachable, the Kaggle mirror reachable. Every golden under
+`golden/` for those five is from that mirror (2005-02-25 to 2017-11-10,
+training to 2013-12-31, testing 2014–2017), and none of the five was
+promoted; the write-ups in `docs/strategies/` record each verdict and why
+the window is a poor judge of it. `make golden-study STUDY=<name>` on a
+machine that reaches Yahoo regenerates the goldens and lets the study
+promote. The research registry now lists all nine studies, and re-validation
+runs a spec through the study its provenance names.
+
+What the four-year mirror window did say, uniformly: the rules that hold
+for days (`rsi2_reversion`) or trade on false breakouts (`donchian_breakout`)
+paid for their turnover, and the slippage stress in each `robustness.json`
+is the number to read first; the rules that turn monthly
+(`risk_parity_trend`, `sector_rotation`) kept most of their Sharpe at 20 bp.
