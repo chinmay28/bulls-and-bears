@@ -1,0 +1,36 @@
+name: time_series_momentum
+version: 1
+strategy: time_series_momentum
+universe:
+- SPY
+- QQQ
+- IWM
+- EFA
+- EEM
+- TLT
+- GLD
+params:
+  lookback: 63.0
+  rebalance_days: 5.0
+execution:
+  signal_at: close
+  fill_at: next_open
+sizing:
+  gross_leverage: 1.0
+  max_notional_per_leg_usd: 2000.0
+provenance:
+  train_window:
+    from: '2005-02-25'
+    to: '2013-12-31'
+  test_window:
+    from: '2014-01-01'
+    to: '2017-11-10'
+  oos_sharpe: 0.4619216710621923
+  oos_max_drawdown: -0.2174567929761927
+  cost_model:
+    commission_usd: 0.0
+    slippage_bps: 5.0
+  research_git_sha: fc0dbd2
+  generated_at: '2026-09-08T05:33:09Z'
+  ttl_days: 90
+  research_study: time_series_momentum

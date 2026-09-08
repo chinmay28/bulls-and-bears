@@ -22,6 +22,7 @@ func installSpec(t *testing.T, dir, name, strategy string, universe []string, tr
 		"sma_trend":       "  lookback: 200\n  band: 0.02\n",
 		"dual_momentum":   "  lookback: 252\n  top_k: 1\n  rebalance_days: 21\n",
 		"pairs_zscore":    "  hedge_ratio: 1.6\n  lookback: 20\n  entry_z: 2\n  exit_z: 0.5\n  max_hold_days: 30\n",
+		"time_series_momentum": "  lookback: 252\n  rebalance_days: 21\n",
 	}[strategy]
 	src := "name: " + name + "\nversion: 1\nstrategy: " + strategy + "\nuniverse: [" + strings.Join(universe, ", ") + "]\n" +
 		"params:\n" + params +

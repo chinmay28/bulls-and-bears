@@ -44,6 +44,9 @@ def test_every_registered_strategy_name_validates() -> None:
                     params={"lookback": 200, "band": 0.01}))
     validate(a_spec(name="dm", strategy="dual_momentum", universe=["SPY", "QQQ", "GLD"],
                     params={"lookback": 252, "top_k": 1, "rebalance_days": 21}))
+    validate(a_spec(name="tsm", strategy="time_series_momentum", universe=["SPY", "GLD"],
+                    params={"lookback": 252, "rebalance_days": 21}, fill_at="next_open",
+                    research_study="time_series_momentum"))
     validate(a_spec(name="etf_gld_ratio", strategy="ratio_reversion",
                     universe=["SPY", "QQQ", "VTI", "XLK", "GLD"],
                     params={"lookback": 20, "entry_z": 2.0, "exit_z": 0.5, "max_hold_days": 8}))

@@ -97,6 +97,18 @@ var studies = []Study{
 		UniverseHint:    havenHint,
 	},
 	{
+		Name:  "time_series_momentum",
+		Title: "Time-series momentum",
+		Description: "Each ETF on its own trend: every few weeks hold it if its trailing return is " +
+			"positive, rest that sleeve in the haven otherwise. Nothing compares one ETF with another. " +
+			"Lookback and rebalance interval are chosen on the training window; fills at the next open.",
+		Script:          "scripts/time_series_momentum.py",
+		Strategy:        "time_series_momentum",
+		DefaultTrainTo:  "2019-12-31",
+		DefaultUniverse: []string{"SPY", "QQQ", "IWM", "EFA", "EEM", "TLT", "GLD"},
+		UniverseHint:    havenHint,
+	},
+	{
 		Name:  "gld_gdx_pairs",
 		Title: "Pairs (GLD/GDX)",
 		Description: "Chan's pairs trade: the cointegrating hedge ratio from the training window, then a " +
