@@ -53,6 +53,10 @@ EXITS = [-0.5, 0.0, 0.5, 1.0]
 # One to two trades a week: each sleeve switch is a sell and a buy, so 40..120
 # switches a year across the four sleeves is 80..240 orders, 1.5..4.5 a week.
 BAND = (40.0, 120.0)
+# The test window has to be long enough for its Sharpe to mean something. A
+# year of daily returns is the least the runtime's floor should be cleared
+# on; four days of them annualize to any number at all.
+MIN_TEST_BARS = 252
 
 
 @dataclass(frozen=True)
@@ -185,6 +189,12 @@ def main() -> int:
     test = (args.train_to + dt.timedelta(days=1), last)
     if not first < train[1] < last:
         print(f"train_to {train[1]} must fall inside the data {first}..{last}", file=sys.stderr)
+        return 2
+    test_bars = int((pd.to_datetime(aligned["date"]).dt.date >= test[0]).sum())
+    if test_bars < MIN_TEST_BARS:
+        print(f"REFUSED: the test window {test[0]}..{test[1]} holds {test_bars} bars; at least "
+              f"{MIN_TEST_BARS} (about a year) are needed before an out-of-sample Sharpe means "
+              f"anything. Move --train-to earlier.", file=sys.stderr)
         return 2
     print(f"data: {source_note}; {len(aligned)} aligned bars {first}..{last}")
     print(f"train {train[0]}..{train[1]}, test {test[0]}..{test[1]}, costs {COSTS}")

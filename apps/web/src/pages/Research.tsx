@@ -147,6 +147,15 @@ function EnvironmentCard({
   )
 }
 
+/** The latest training cutoff a study accepts: a year before today, so the
+ *  window it is judged on holds about a year of bars. The server refuses
+ *  anything later; the field just does not offer it. */
+function latestTrainTo(): string {
+  const d = new Date()
+  d.setUTCFullYear(d.getUTCFullYear() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
 function StudyCard({ study, disabled, onRun }: { study: Study; disabled: boolean; onRun: (trainTo?: string) => void }) {
   const [trainTo, setTrainTo] = useState(study.defaultTrainTo ?? '')
   return (
@@ -157,9 +166,9 @@ function StudyCard({ study, disabled, onRun }: { study: Study; disabled: boolean
       {study.defaultTrainTo && (
         <Field
           label="Train through"
-          help="The last day of the training window. Parameters are chosen on it alone; everything after is the one look out of sample."
+          help="The last day of the training window. Parameters are chosen on it alone; everything after, at least a year of it, is the one look out of sample."
         >
-          <input type="date" value={trainTo} onChange={(e) => setTrainTo(e.target.value)} />
+          <input type="date" value={trainTo} max={latestTrainTo()} onChange={(e) => setTrainTo(e.target.value)} />
         </Field>
       )}
       <button
