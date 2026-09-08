@@ -191,6 +191,7 @@ func TestStartRefusesWhatItCanJudgeUpFront(t *testing.T) {
 		{"unknown study", Run, "momentum", Options{}, "no study named"},
 		{"bad date", Run, "etf_gld_ratio", Options{TrainTo: "yesterday"}, "not a YYYY-MM-DD date"},
 		{"date for a study without one", Run, "gld_gdx_pairs", Options{TrainTo: "2019-12-31"}, "takes no train-to"},
+		{"train-to too recent", Run, "etf_gld_ratio", Options{TrainTo: time.Now().AddDate(0, -6, 0).Format("2006-01-02")}, "less than a year out of sample"},
 		{"unknown kind", Kind("dance"), "", Options{}, "unknown job kind"},
 	}
 	for _, tc := range cases {

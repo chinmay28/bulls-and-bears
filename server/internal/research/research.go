@@ -51,7 +51,7 @@ var studies = []Study{
 		Title: "ETF/GLD ratio reversion",
 		Description: "SPY, QQQ, VTI and XLK against GLD: hold an ETF while its price ratio to gold is " +
 			"stretched below its own trailing mean, hold GLD otherwise. Sweeps on the training window, " +
-			"judges once out of sample, and promotes the spec only if the Sharpe clears 1.0.",
+			"judges once on the year or more after it, and promotes the spec only if the Sharpe clears 1.0.",
 		Script:         "scripts/etf_gld_ratio.py",
 		DefaultTrainTo: "2019-12-31",
 	},
@@ -156,6 +156,12 @@ type Env struct {
 	Busy bool `json:"busy"`
 }
 
+// MinTestDays is how far before today a study's training window must end,
+// so its test window holds about a year of bars. The scripts enforce the
+// same minimum in bars (MIN_TEST_BARS); this is the fast answer before a
+// fetch is paid for.
+const MinTestDays = 365
+
 // ErrBusy is returned when a job is asked for while one runs: research is
 // one-at-a-time, because two syncs of one environment is a mess and the
 // machine is also trading.
@@ -249,8 +255,13 @@ func (r *Runner) Start(kind Kind, studyName string, opts Options) (View, error) 
 			if study.DefaultTrainTo == "" {
 				return View{}, fmt.Errorf("research: %s takes no train-to date", study.Name)
 			}
-			if _, err := time.Parse("2006-01-02", opts.TrainTo); err != nil {
+			trainTo, err := time.Parse("2006-01-02", opts.TrainTo)
+			if err != nil {
 				return View{}, fmt.Errorf("research: train-to %q is not a YYYY-MM-DD date", opts.TrainTo)
+			}
+			if latest := time.Now().UTC().AddDate(0, 0, -MinTestDays); trainTo.After(latest) {
+				return View{}, fmt.Errorf("research: train-to %s leaves less than a year out of sample; "+
+					"it must be %s or earlier", opts.TrainTo, latest.Format("2006-01-02"))
 			}
 		}
 	default:

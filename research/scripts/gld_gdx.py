@@ -37,6 +37,9 @@ TRAIN = (dt.date(2015, 1, 1), dt.date(2022, 12, 31))
 COSTS = CostModel(commission_usd=0.0, slippage_bps=5.0)
 LOOKBACK, ENTRY, EXIT = 20, 2.0, 0.5
 MAX_LEG_USD = 2000.0
+# A year of out-of-sample bars, at least, before the Sharpe is judged; the
+# synthetic pair is exempt because it is only ever a parity fixture.
+MIN_TEST_BARS = 252
 
 
 def _slice(df: pd.DataFrame, lo: dt.date, hi: dt.date) -> pd.DataFrame:
@@ -70,6 +73,12 @@ def main() -> int:
         source_note = "Yahoo Finance via yfinance"
     last = min(pd.Timestamp(bars[s]["date"].iloc[-1]).date() for s in UNIVERSE)
     test = (dt.date(2023, 1, 1), last)
+    test_bars = int((pd.to_datetime(pairs.align(bars, UNIVERSE)["date"]).dt.date >= test[0]).sum())
+    if not args.synthetic and test_bars < MIN_TEST_BARS:
+        print(f"REFUSED: the test window {test[0]}..{test[1]} holds {test_bars} bars; at least "
+              f"{MIN_TEST_BARS} (about a year) are needed before an out-of-sample Sharpe means anything.",
+              file=sys.stderr)
+        return 2
 
     # Train: cointegration, hedge ratio, half-life.
     train = pairs.align({s: _slice(bars[s], *TRAIN) for s in UNIVERSE}, UNIVERSE)

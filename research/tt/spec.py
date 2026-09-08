@@ -26,9 +26,12 @@ SCHEMA_PATH = REPO_ROOT / "specs" / "strategy.schema.json"
 def git_sha(cwd: Path = REPO_ROOT) -> str:
     """Short SHA of the research that produced a spec, or ``0000000`` outside git."""
     try:
+        # The app runs this as the service user inside a checkout root owns;
+        # without safe.directory git refuses to read it and the spec would
+        # carry 0000000 for the research that produced it.
         out = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"], cwd=cwd, capture_output=True, text=True,
-            check=True,
+            ["git", "-c", f"safe.directory={cwd}", "rev-parse", "--short", "HEAD"], cwd=cwd,
+            capture_output=True, text=True, check=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "0000000"
