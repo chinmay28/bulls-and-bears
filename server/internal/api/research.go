@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -28,6 +29,8 @@ type researchView struct {
 	// Logs is every job with a log on disk, newest first, this process's
 	// and earlier ones'.
 	Logs []string `json:"logs"`
+	// Schedule is the monthly re-validation; null when the server has none.
+	Schedule *research.ScheduleView `json:"schedule"`
 }
 
 // jobLogView is a job with the part of its log the client has not seen.
@@ -60,7 +63,52 @@ func (s *Server) handleResearch(w http.ResponseWriter, r *http.Request) {
 	if v.Logs == nil {
 		v.Logs = []string{}
 	}
+	if s.Schedule != nil {
+		sv := s.Schedule.View()
+		v.Schedule = &sv
+	}
 	writeJSON(w, http.StatusOK, v)
+}
+
+// handleResearchSchedule turns the monthly re-validation on or off.
+func (s *Server) handleResearchSchedule(w http.ResponseWriter, r *http.Request) {
+	if s.Schedule == nil {
+		writeError(w, http.StatusConflict, "the server has no re-validation schedule")
+		return
+	}
+	var body struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Enabled == nil {
+		writeError(w, http.StatusBadRequest, "say whether the schedule is enabled")
+		return
+	}
+	if err := s.Schedule.SetEnabled(*body.Enabled); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Log.Info("research re-validation schedule", "enabled", *body.Enabled)
+	writeJSON(w, http.StatusOK, s.Schedule.View())
+}
+
+// handleResearchRevalidate re-validates every installed spec now, in the
+// background, whatever the month or the market: the operator asked.
+func (s *Server) handleResearchRevalidate(w http.ResponseWriter, r *http.Request) {
+	if s.Schedule == nil {
+		writeError(w, http.StatusConflict, "the server has no re-validation schedule")
+		return
+	}
+	if s.Schedule.View().Running || (s.Research != nil && s.Research.Env().Busy) {
+		writeError(w, http.StatusConflict, "a research job is already running; wait for it or cancel it")
+		return
+	}
+	s.Log.Info("research re-validation of every installed spec started from the app")
+	go s.Schedule.Pass(context.Background(), true)
+	writeJSON(w, http.StatusAccepted, s.Schedule.View())
 }
 
 func (s *Server) handleResearchSetup(w http.ResponseWriter, r *http.Request) {

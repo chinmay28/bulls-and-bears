@@ -41,6 +41,9 @@ type Study struct {
 	Description string `json:"description"`
 	// Script is the path of the script inside the research tree.
 	Script string `json:"script"`
+	// Strategy is the spec strategy the script emits, so a spec can be
+	// traced back to the study that re-validates it.
+	Strategy string `json:"strategy"`
 	// TrainTo says the script takes --train-to, and what the app offers by
 	// default. Empty when the study has no such option.
 	DefaultTrainTo string `json:"defaultTrainTo,omitempty"`
@@ -64,6 +67,7 @@ var studies = []Study{
 			"mean, hold the haven otherwise. Sweeps on the training window, judges once on the year or " +
 			"more after it, and promotes the spec only if the Sharpe clears 1.0.",
 		Script:          "scripts/etf_gld_ratio.py",
+		Strategy:        "ratio_reversion",
 		DefaultTrainTo:  "2019-12-31",
 		DefaultUniverse: []string{"SPY", "QQQ", "VTI", "XLK", "GLD"},
 		UniverseHint:    havenHint,
@@ -75,6 +79,7 @@ var studies = []Study{
 			"the haven otherwise. Trades a few times a year per sleeve. The lookback and the band " +
 			"around the average are chosen on the training window.",
 		Script:          "scripts/sma_trend.py",
+		Strategy:        "sma_trend",
 		DefaultTrainTo:  "2019-12-31",
 		DefaultUniverse: []string{"SPY", "QQQ", "VTI", "XLK", "GLD"},
 		UniverseHint:    havenHint,
@@ -86,6 +91,7 @@ var studies = []Study{
 			"best that beat the haven's own return, rest in the haven. Lookback, how many to hold and " +
 			"the rebalance interval are chosen on the training window.",
 		Script:          "scripts/dual_momentum.py",
+		Strategy:        "dual_momentum",
 		DefaultTrainTo:  "2019-12-31",
 		DefaultUniverse: []string{"SPY", "QQQ", "VTI", "XLK", "GLD"},
 		UniverseHint:    havenHint,
@@ -96,6 +102,7 @@ var studies = []Study{
 		Description: "Chan's pairs trade: the cointegrating hedge ratio from the training window, then a " +
 			"z-score band on the spread. Any two symbols; gold against gold miners by default.",
 		Script:          "scripts/gld_gdx.py",
+		Strategy:        "pairs_zscore",
 		DefaultUniverse: []string{"GLD", "GDX"},
 		UniverseSize:    2,
 		UniverseHint:    "Exactly two symbols: the spread is the first less the hedge ratio times the second.",
@@ -104,6 +111,16 @@ var studies = []Study{
 
 // Studies lists what the app can run, in a fixed order.
 func Studies() []Study { return append([]Study(nil), studies...) }
+
+// ForStrategy returns the study that emits a strategy.
+func ForStrategy(strategy string) (Study, bool) {
+	for _, s := range studies {
+		if s.Strategy == strategy {
+			return s, true
+		}
+	}
+	return Study{}, false
+}
 
 // Find returns the named study.
 func Find(name string) (Study, bool) {

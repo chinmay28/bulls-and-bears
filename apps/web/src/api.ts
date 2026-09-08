@@ -9,6 +9,7 @@ import type {
   ResearchInfo,
   ResearchJob,
   Run,
+  Schedule,
   RunDetail,
   SelfInfo,
   Strategy,
@@ -92,6 +93,14 @@ export const api = {
     request<JobLog>(`/api/research/jobs/${encodeURIComponent(id)}?from=${from}`),
   researchCancel: (id: string) =>
     request<ResearchJob>(`/api/research/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Turns the monthly re-validation of installed specs on or off. */
+  setSchedule: (enabled: boolean) => request<Schedule>('/api/research/schedule', { method: 'PUT', ...json({ enabled }) }),
+  /** Re-validates every installed spec now, in the background. */
+  revalidateNow: () => request<Schedule>('/api/research/schedule/run', { method: 'POST' }),
+  /** Promotes a spec to live, or returns it to paper. The operator's call,
+   *  kept outside the spec so research cannot make it. */
+  setStage: (name: string, stage: 'paper' | 'live') =>
+    request<Strategy>(`/api/strategies/${encodeURIComponent(name)}/stage`, { method: 'PUT', ...json({ stage }) }),
 
   runs: () => request<Run[]>('/api/runs'),
   run: (id: string) => request<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),

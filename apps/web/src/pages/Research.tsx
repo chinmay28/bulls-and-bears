@@ -4,7 +4,7 @@ import { ApiError, api } from '../api'
 import { TabPage } from '../components/Layout'
 import { Badge, Banner, Card, Field, Loading, SectionTitle, useLoader } from '../components/ui'
 import { parts, time } from '../lib/format'
-import type { JobStatus, ResearchInfo, ResearchJob, Study } from '../types'
+import type { JobStatus, ResearchInfo, ResearchJob, Schedule, Study } from '../types'
 
 /** How often a running job's log is pulled. */
 const POLL_MS = 1500
@@ -47,6 +47,13 @@ export default function Research() {
             error={actionError}
             onSetup={() => start(() => api.researchSetup())}
           />
+
+          {data.schedule && (
+            <>
+              <SectionTitle>Re-validation</SectionTitle>
+              <ScheduleCard schedule={data.schedule} busy={busy} onChanged={reload} onShow={setSelected} />
+            </>
+          )}
 
           <SectionTitle>Studies</SectionTitle>
           {data.studies.map((study) => (
@@ -143,6 +150,99 @@ function EnvironmentCard({
       <button className="secondary block" disabled={busy || !env.tree} onClick={onSetup}>
         {busy ? 'A job is running…' : env.synced ? 'Rebuild the environment' : 'Set up the environment'}
       </button>
+    </Card>
+  )
+}
+
+/** ScheduleCard is the monthly re-validation: each installed spec re-run
+ *  with its training cutoff held fixed, so its parameters cannot drift and
+ *  its out-of-sample window only grows. A spec that promotes again is
+ *  refreshed; one that does not is left to expire at its TTL. */
+function ScheduleCard({
+  schedule,
+  busy,
+  onChanged,
+  onShow,
+}: {
+  schedule: Schedule
+  busy: boolean
+  onChanged: () => void
+  onShow: (jobId: string) => void
+}) {
+  const [error, setError] = useState('')
+  const act = async (fn: () => Promise<unknown>) => {
+    setError('')
+    try {
+      await fn()
+      onChanged()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+    }
+  }
+  const latest = new Map<string, Schedule['history'][number]>()
+  for (const rec of schedule.history) if (!latest.has(rec.name)) latest.set(rec.name, rec)
+  const names = [...new Set([...Object.keys(schedule.lastRun), ...schedule.due])].sort()
+  return (
+    <Card>
+      <div className="row between">
+        <div className="grow">
+          <div className="title">{schedule.enabled ? 'Monthly, outside market hours' : 'Off'}</div>
+          <div className="sub">
+            Every installed spec is re-run once a month with its training cutoff fixed. One that clears the floor
+            again is refreshed and stays armed; one that does not is left to expire at its TTL.
+          </div>
+        </div>
+        {schedule.running ? (
+          <Badge tone="accent" dot pulse>
+            Running
+          </Badge>
+        ) : (
+          <Badge tone={schedule.enabled ? 'good' : 'neutral'} dot={schedule.enabled}>
+            {schedule.enabled ? 'On' : 'Off'}
+          </Badge>
+        )}
+      </div>
+      {names.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          {names.map((name) => {
+            const rec = latest.get(name)
+            const last = schedule.lastRun[name]
+            return (
+              <div className="kv" key={name}>
+                <span className="k">{name}</span>
+                <span className="v" style={{ color: rec?.status === 'failed' ? 'var(--bad)' : undefined }}>
+                  {rec ? (
+                    <button
+                      style={{ background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit', textAlign: 'right' }}
+                      onClick={() => rec.jobId && onShow(rec.jobId)}
+                    >
+                      {parts(
+                        last && time(last),
+                        rec.error ? 'failed' : rec.outcome ? (rec.outcome.promoted ? 'promoted' : 'not promoted') : rec.status,
+                      )}
+                    </button>
+                  ) : (
+                    'due'
+                  )}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: 12 }}>
+          <Banner tone="bad">{error}</Banner>
+        </div>
+      )}
+      <div className="row" style={{ gap: 8, marginTop: 12 }}>
+        <button className="secondary grow" onClick={() => act(() => api.setSchedule(!schedule.enabled))}>
+          {schedule.enabled ? 'Turn off' : 'Turn on'}
+        </button>
+        <button className="secondary grow" disabled={busy || schedule.running} onClick={() => act(() => api.revalidateNow())}>
+          Re-validate all now
+        </button>
+      </div>
     </Card>
   )
 }

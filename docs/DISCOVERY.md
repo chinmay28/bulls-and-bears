@@ -139,3 +139,38 @@ nowhere to land. `-specs` is now `<data>/specs`, seeded from the checkout's
 `specs/*.yaml` on install and upgrade without overwriting what is already
 there — the operator's imports and the specs studies promote survive an
 upgrade, and the checkout's specs still arrive.
+
+## Re-validation on a schedule, and the paper-to-live stage
+
+Asked whether the studies should run every day and arm or disarm specs on
+their own, the answer was mostly no, and the shape that was built follows
+from why. A study picks parameters on a training window and takes one look
+at the test window; run daily on a moving window, that one look becomes
+thousands of overlapping looks and the armed spec is whichever day's draw
+cleared 1.0 — the data-snooping the plan's §0 loop exists to avoid. The
+floor is also a noisy line: a year out of sample puts about ±1 on a Sharpe,
+so a rule at 1.2 crosses 1.0 on many days for no reason, and every crossing
+would liquidate a book at five basis points a side, at the bottom of a
+drawdown by construction.
+
+So `internal/research.Schedule` re-runs every installed spec **once a
+month, outside market hours, with the training cutoff it was produced
+with**. Parameters cannot drift, the out-of-sample window only grows, and the
+question each run asks is the honest one. A run that promotes rewrites the
+spec with a fresh `generated_at`; a run that does not leaves the spec alone
+and it expires at its TTL, the runtime refuses it, and the runner's targets
+for it go to zero. That expiry is the only automatic disarm. The fast ones —
+the drawdown kill switch and the live-versus-paper divergence in §6 — stay
+in the risk gate, acting on the money rather than on a backtest.
+
+Arming stays automatic only on paper. `internal/stage` records which specs
+the operator has promoted to live, in the data directory rather than in the
+spec, so research cannot make that decision and a re-validation cannot
+unmake it. In live mode the runner arms only promoted specs; in dry-run the
+stage changes nothing, because paper is what the book is. That is the
+plan's Phase 4 gate, a month of paper agreeing with the backtest, made
+explicit per spec.
+
+Not done: the §9 webhook for promotions and expiries. The re-validation
+history is on the Research tab and in `<data>/research/revalidate.json`,
+and an expiry shows on the next run's journal as a refused spec.

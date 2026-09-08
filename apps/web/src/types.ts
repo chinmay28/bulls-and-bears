@@ -82,6 +82,8 @@ export interface Strategy {
   provenance?: Provenance
   freshDays: number
   expires?: string
+  /** Where the spec may trade: paper until the operator promotes it to live. */
+  stage: 'paper' | 'live'
   signal: Signal | null
   signalError?: string
 }
@@ -226,6 +228,8 @@ export interface Study {
   title: string
   description: string
   script: string
+  /** The spec strategy the study emits. */
+  strategy: string
   /** Set when the study takes a training-window end date. */
   defaultTrainTo?: string
   /** The symbols the study runs on unless told otherwise, the haven last. */
@@ -260,6 +264,29 @@ export interface ResearchJob {
   logBytes: number
 }
 
+/** One re-validation of one installed spec. */
+export interface Revalidation {
+  name: string
+  study: string
+  jobId?: string
+  at: string
+  status: JobStatus
+  outcome?: { promoted: boolean; line: string }
+  error?: string
+}
+
+/** The monthly re-validation of installed specs. */
+export interface Schedule {
+  enabled: boolean
+  /** When each spec was last re-validated, by name. */
+  lastRun: Record<string, string>
+  /** Newest first. */
+  history: Revalidation[]
+  running: boolean
+  /** The specs the next wake would re-run. */
+  due: string[]
+}
+
 export interface ResearchInfo {
   env: ResearchEnv
   studies: Study[]
@@ -267,6 +294,7 @@ export interface ResearchInfo {
   recent: ResearchJob[]
   /** Every job with a log on disk, newest first. */
   logs: string[]
+  schedule: Schedule | null
 }
 
 export interface JobLog {

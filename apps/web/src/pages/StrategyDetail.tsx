@@ -18,7 +18,7 @@ const PARAM_LABEL: Record<string, string> = {
 
 export default function StrategyDetail() {
   const { name = '' } = useParams()
-  const { data: s, error, offline } = useLoader(() => api.strategy(name), [name], 15000)
+  const { data: s, error, offline, reload } = useLoader(() => api.strategy(name), [name], 15000)
   const [bt, setBt] = useState<Backtest | null>(null)
   const [busy, setBusy] = useState(false)
   const [btError, setBtError] = useState<string | null>(null)
@@ -163,11 +163,69 @@ export default function StrategyDetail() {
             </>
           )}
 
+          {s.provenance && (
+            <>
+              <SectionTitle>Stage</SectionTitle>
+              <StageCard name={name} stage={s.stage} onChanged={reload} />
+            </>
+          )}
+
           <SectionTitle>Remove</SectionTitle>
           <RemoveCard name={name} />
         </>
       )}
     </Page>
+  )
+}
+
+/** StageCard is the operator's decision, separate from research's: a spec
+ *  earns its place on paper by clearing the floor; only a promotion here
+ *  lets it touch real money once a live broker is connected. */
+function StageCard({ name, stage, onChanged }: { name: string; stage: 'paper' | 'live'; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const set = async (next: 'paper' | 'live') => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.setStage(name, next)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Card>
+      <div className="row between">
+        <div className="grow">
+          <div className="title">{stage === 'live' ? 'Promoted to live' : 'Paper'}</div>
+          <div className="sub">
+            {stage === 'live'
+              ? 'When a live broker is connected, this spec trades real money. Until then it trades on paper like every other.'
+              : 'Trades on paper. When a live broker is connected, only promoted specs trade real money; the plan asks for a month of paper agreeing with the backtest first.'}
+          </div>
+        </div>
+        <Badge tone={stage === 'live' ? 'warn' : 'accent'}>{stage === 'live' ? 'Live' : 'Paper'}</Badge>
+      </div>
+      {error && (
+        <div style={{ marginTop: 10 }}>
+          <Banner tone="bad">{error}</Banner>
+        </div>
+      )}
+      <div className="actions">
+        {stage === 'live' ? (
+          <button className="secondary" disabled={busy} onClick={() => set('paper')}>
+            Back to paper
+          </button>
+        ) : (
+          <button className="secondary" disabled={busy} onClick={() => set('live')}>
+            Promote to live
+          </button>
+        )}
+      </div>
+    </Card>
   )
 }
 
