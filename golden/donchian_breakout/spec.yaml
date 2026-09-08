@@ -1,0 +1,36 @@
+name: donchian_breakout
+version: 1
+strategy: donchian_breakout
+universe:
+- SPY
+- QQQ
+- IWM
+- EFA
+- EEM
+- TLT
+- GLD
+params:
+  entry_lookback: 55.0
+  exit_lookback: 20.0
+execution:
+  signal_at: close
+  fill_at: next_open
+sizing:
+  gross_leverage: 1.0
+  max_notional_per_leg_usd: 2000.0
+provenance:
+  train_window:
+    from: '2005-02-25'
+    to: '2013-12-31'
+  test_window:
+    from: '2014-01-01'
+    to: '2017-11-10'
+  oos_sharpe: 0.06338270516590719
+  oos_max_drawdown: -0.18168805748685835
+  cost_model:
+    commission_usd: 0.0
+    slippage_bps: 5.0
+  research_git_sha: c8d1c55
+  generated_at: '2026-09-08T05:37:21Z'
+  ttl_days: 90
+  research_study: donchian_breakout

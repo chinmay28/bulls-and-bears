@@ -46,6 +46,7 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/sched"
 	"github.com/chinmay28/bulls-and-bears/server/internal/spec"
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy"
+	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/donchian"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/momentum"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/pairs"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/ratio"

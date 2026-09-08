@@ -109,6 +109,18 @@ var studies = []Study{
 		UniverseHint:    havenHint,
 	},
 	{
+		Name:  "donchian_breakout",
+		Title: "Donchian breakout",
+		Description: "Turtle-style breakout: hold an ETF once it closes above the highest high of the " +
+			"prior entry window, leave for the haven once it closes below the lowest low of the prior " +
+			"exit window. Five entry/exit pairs are tried on the training window; fills at the next open.",
+		Script:          "scripts/donchian_breakout.py",
+		Strategy:        "donchian_breakout",
+		DefaultTrainTo:  "2019-12-31",
+		DefaultUniverse: []string{"SPY", "QQQ", "IWM", "EFA", "EEM", "TLT", "GLD"},
+		UniverseHint:    havenHint,
+	},
+	{
 		Name:  "gld_gdx_pairs",
 		Title: "Pairs (GLD/GDX)",
 		Description: "Chan's pairs trade: the cointegrating hedge ratio from the training window, then a " +

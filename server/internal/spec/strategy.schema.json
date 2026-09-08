@@ -12,7 +12,7 @@
     "strategy": {
       "description": "Must match a registered Go and Python implementation.",
       "type": "string",
-      "enum": ["pairs_zscore", "ratio_reversion", "sma_trend", "dual_momentum", "time_series_momentum"]
+      "enum": ["pairs_zscore", "ratio_reversion", "sma_trend", "dual_momentum", "time_series_momentum", "donchian_breakout"]
     },
     "universe": {
       "type": "array",
@@ -22,7 +22,7 @@
     },
     "params": {
       "type": "object",
-      "description": "Strategy-specific. pairs_zscore takes hedge_ratio, lookback, entry_z, exit_z, max_hold_days. ratio_reversion takes lookback, entry_z, exit_z, max_hold_days. sma_trend takes lookback, band. dual_momentum takes lookback, top_k, rebalance_days. time_series_momentum takes lookback, rebalance_days.",
+      "description": "Strategy-specific. pairs_zscore takes hedge_ratio, lookback, entry_z, exit_z, max_hold_days. ratio_reversion takes lookback, entry_z, exit_z, max_hold_days. sma_trend takes lookback, band. dual_momentum takes lookback, top_k, rebalance_days. time_series_momentum takes lookback, rebalance_days. donchian_breakout takes entry_lookback, exit_lookback.",
       "additionalProperties": { "type": "number" }
     },
     "execution": {
