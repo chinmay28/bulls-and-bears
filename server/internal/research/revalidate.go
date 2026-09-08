@@ -229,11 +229,26 @@ func MarketClosed(now time.Time) bool {
 	return now.Before(open) || now.After(sess.Close.Add(30*time.Minute))
 }
 
-// ForSpec is the study and options that re-validate a spec: the study that
-// emits its strategy, on its universe, with its training cutoff.
+// ForSpec is the study and options that re-validate a spec: the study its
+// provenance names, on its universe, with its training cutoff. A spec
+// written before provenance carried research_study falls back to the first
+// study that emits its strategy; a spec naming a study this build does not
+// have, or one that emits a different strategy, is an error rather than a
+// guess.
 func ForSpec(sp *spec.Spec) (Study, Options, error) {
-	st, ok := ForStrategy(sp.Strategy)
-	if !ok {
+	var (
+		st Study
+		ok bool
+	)
+	if name := sp.Provenance.ResearchStudy; name != "" {
+		st, ok = Find(name)
+		if !ok {
+			return Study{}, Options{}, fmt.Errorf("research: spec names study %q, which this build does not have", name)
+		}
+		if st.Strategy != sp.Strategy {
+			return Study{}, Options{}, fmt.Errorf("research: study %s emits %s, not the spec's %s", name, st.Strategy, sp.Strategy)
+		}
+	} else if st, ok = ForStrategy(sp.Strategy); !ok {
 		return Study{}, Options{}, fmt.Errorf("research: no study produces %s", sp.Strategy)
 	}
 	opts := Options{Universe: append([]string(nil), sp.Universe...)}

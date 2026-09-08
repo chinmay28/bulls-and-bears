@@ -18,10 +18,10 @@ import (
 func installSpec(t *testing.T, dir, name, strategy string, universe []string, trainTo, generated string) {
 	t.Helper()
 	params := map[string]string{
-		"ratio_reversion": "  lookback: 20\n  entry_z: 2\n  exit_z: 0.5\n  max_hold_days: 8\n",
-		"sma_trend":       "  lookback: 200\n  band: 0.02\n",
-		"dual_momentum":   "  lookback: 252\n  top_k: 1\n  rebalance_days: 21\n",
-		"pairs_zscore":    "  hedge_ratio: 1.6\n  lookback: 20\n  entry_z: 2\n  exit_z: 0.5\n  max_hold_days: 30\n",
+		"ratio_reversion":      "  lookback: 20\n  entry_z: 2\n  exit_z: 0.5\n  max_hold_days: 8\n",
+		"sma_trend":            "  lookback: 200\n  band: 0.02\n",
+		"dual_momentum":        "  lookback: 252\n  top_k: 1\n  rebalance_days: 21\n",
+		"pairs_zscore":         "  hedge_ratio: 1.6\n  lookback: 20\n  entry_z: 2\n  exit_z: 0.5\n  max_hold_days: 30\n",
 		"time_series_momentum": "  lookback: 252\n  rebalance_days: 21\n",
 		"donchian_breakout":    "  entry_lookback: 55\n  exit_lookback: 20\n",
 		"risk_parity_trend":    "  trend_lookback: 200\n  vol_lookback: 63\n  rebalance_days: 21\n",
@@ -108,6 +108,30 @@ func TestForSpec(t *testing.T) {
 	}
 	if _, _, err := ForSpec(&spec.Spec{Strategy: "momentum_of_the_week"}); err == nil {
 		t.Error("an unknown strategy found a study")
+	}
+	// A spec that names its study is re-validated by that study, not by the
+	// first study of its strategy.
+	named := &spec.Spec{Strategy: "dual_momentum", Universe: []string{"XLK", "XLE", "GLD"}}
+	named.Provenance.ResearchStudy = "sector_rotation"
+	named.Provenance.TrainWindow.To = time.Date(2019, 12, 31, 0, 0, 0, 0, time.UTC)
+	st, opts, err := ForSpec(named)
+	if err != nil || st.Name != "sector_rotation" || opts.TrainTo != "2019-12-31" {
+		t.Errorf("named study -> %s %+v %v", st.Name, opts, err)
+	}
+	named.Provenance.ResearchStudy = ""
+	if st, _, err := ForSpec(named); err != nil || st.Name != "dual_momentum" {
+		t.Errorf("unnamed dual_momentum -> %s %v", st.Name, err)
+	}
+	named.Provenance.ResearchStudy = "sma_trend"
+	if _, _, err := ForSpec(named); err == nil {
+		t.Error("a study that emits another strategy was accepted")
+	}
+	named.Provenance.ResearchStudy = "no_such_study"
+	if _, _, err := ForSpec(named); err == nil {
+		t.Error("an unknown study was accepted")
+	}
+	if got := StudiesForStrategy("dual_momentum"); len(got) != 2 || got[0].Name != "dual_momentum" || got[1].Name != "sector_rotation" {
+		t.Errorf("StudiesForStrategy(dual_momentum) = %v", got)
 	}
 }
 

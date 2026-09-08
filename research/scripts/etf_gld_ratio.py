@@ -102,7 +102,7 @@ def main() -> int:
     trials = []
     for p in grid():
         tr = ratio.replay(train_bars, universe, p, 1.0)
-        res = study.backtest_weights(train_prices, ratio.weights_frame(tr, universe), win.train[0])
+        res = study.backtest_weights(train_prices, ratio.weights_frame(tr, universe), win.train[0], fill=FILL)
         trials.append(Trial(p, float(study.summary(res)["sharpe"]), ratio.switches(tr, universe) / years, res))
     best, why = choose(trials)
     print(f"\ntrain: {len(trials)} configurations; top 8 by Sharpe:")
@@ -127,7 +127,7 @@ def main() -> int:
     # Test: replay over the whole history so the sleeves are warm; the book
     # opens on the first test bar. This is the one look at the test window.
     tr = ratio.replay(data.bars, universe, p, gross)
-    oos = study.backtest_weights(aligned, ratio.weights_frame(tr, universe), win.test[0])
+    oos = study.backtest_weights(aligned, ratio.weights_frame(tr, universe), win.test[0], fill=FILL)
     keep = (pd.to_datetime(tr["date"]).dt.date >= win.test[0]).to_numpy()
     print(study.describe("test", oos, {"switches": ratio.switches(tr[keep].reset_index(drop=True), universe)}))
     print("test buy-and-hold Sharpe: " + ", ".join(

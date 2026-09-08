@@ -58,7 +58,7 @@ def main() -> int:
     for lb, band in itertools.product(LOOKBACKS, BANDS):
         p = trend.Params(lb, band)
         tr = trend.replay(train_bars, universe, p, 1.0)
-        res = study.backtest_weights(train_prices, trend.weights_frame(tr, universe), win.train[0])
+        res = study.backtest_weights(train_prices, trend.weights_frame(tr, universe), win.train[0], fill=FILL)
         m = study.summary(res)
         rows.append((p, float(m["sharpe"]), trend.switches(tr, universe), res))
     rows.sort(key=lambda r: r[1], reverse=True)
@@ -75,7 +75,7 @@ def main() -> int:
     print(f"chosen lookback {best.lookback} band {best.band}; half-Kelly leverage {gross:.3f}")
 
     tr = trend.replay(data.bars, universe, best, gross)
-    oos = study.backtest_weights(aligned, trend.weights_frame(tr, universe), win.test[0])
+    oos = study.backtest_weights(aligned, trend.weights_frame(tr, universe), win.test[0], fill=FILL)
     keep = (pd.to_datetime(tr["date"]).dt.date >= win.test[0]).to_numpy()
     print(study.describe("test", oos, {"switches": trend.switches(tr[keep].reset_index(drop=True), universe)}))
     print("test buy-and-hold Sharpe: " + ", ".join(

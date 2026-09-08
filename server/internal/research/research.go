@@ -147,6 +147,18 @@ var studies = []Study{
 		UniverseHint:    havenHint,
 	},
 	{
+		Name:  "sector_rotation",
+		Title: "Sector rotation",
+		Description: "Dual momentum over the S&P sector ETFs: every month rank the sectors by trailing " +
+			"return, hold the best two or three that beat the haven, rest in the haven. The same " +
+			"strategy as dual momentum on a different universe, a study of its own; fills at the next open.",
+		Script:          "scripts/sector_rotation.py",
+		Strategy:        "dual_momentum",
+		DefaultTrainTo:  "2019-12-31",
+		DefaultUniverse: []string{"XLB", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "GLD"},
+		UniverseHint:    havenHint,
+	},
+	{
 		Name:  "gld_gdx_pairs",
 		Title: "Pairs (GLD/GDX)",
 		Description: "Chan's pairs trade: the cointegrating hedge ratio from the training window, then a " +
@@ -162,12 +174,24 @@ var studies = []Study{
 // Studies lists what the app can run, in a fixed order.
 func Studies() []Study { return append([]Study(nil), studies...) }
 
-// ForStrategy returns the study that emits a strategy.
-func ForStrategy(strategy string) (Study, bool) {
+// StudiesForStrategy lists the studies that emit a strategy, in registry
+// order: one runtime strategy can serve several studies (dual_momentum runs
+// both the dual_momentum and the sector_rotation study).
+func StudiesForStrategy(strategy string) []Study {
+	var out []Study
 	for _, s := range studies {
 		if s.Strategy == strategy {
-			return s, true
+			out = append(out, s)
 		}
+	}
+	return out
+}
+
+// ForStrategy returns the first study that emits a strategy: the fallback
+// for a spec written before provenance named its study.
+func ForStrategy(strategy string) (Study, bool) {
+	if st := StudiesForStrategy(strategy); len(st) > 0 {
+		return st[0], true
 	}
 	return Study{}, false
 }
