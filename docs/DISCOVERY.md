@@ -75,3 +75,24 @@ not a way around provenance: an upload goes through `spec.Check`, the same
 schema, the same 1.0 out-of-sample Sharpe floor and the same TTL a run
 applies, and a spec that would be refused is not written at all. Research
 still has to have earned it — the file just no longer has to arrive by scp.
+
+## Research data when Yahoo is unreachable
+
+The ETF/GLD ratio study (`research/scripts/etf_gld_ratio.py`,
+`docs/strategies/etf_gld_ratio.md`) was first run from a sandbox whose egress
+policy refused every quote host — Yahoo, Stooq, FRED, Alpha Vantage, Tiingo,
+Nasdaq, EODHD — and allowed anonymous clones of public GitHub repositories.
+The plan's data fallback (§2) therefore had a fallback of its own: a GitHub
+mirror of Kaggle's "Huge Stock Market Dataset"
+(`masaok/kaggle-boris-huge-stock-market-dataset`), whose `ETFs/*.us.txt`
+files carry split- and dividend-adjusted daily bars for GLD, SPY, QQQ, VTI
+and XLK from 2005-02-25 to 2017-11-10. The script reads them with
+`--csv-dir`, stamps `source: kaggle`, and never promotes a spec from them:
+promotion needs Yahoo data, which `make golden-ratio` fetches on a machine
+that has it.
+
+What this cost: the study's out-of-sample window ends in November 2017, so
+it says nothing about 2018–2026, the years in which gold's outperformance of
+equities was strongest. The verdict it reaches (the contrarian ratio rule
+does not clear the Sharpe floor) is over 2005–2017 only and is recorded as
+such in the strategy document and in the rejected spec's provenance.

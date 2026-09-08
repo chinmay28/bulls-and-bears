@@ -91,3 +91,46 @@ the spec's `test_window.from`. Per bar, in this order, with `p` the bar's
 Starting cash is 10,000. Fractional shares are assumed. The golden
 `equity_curve.csv` is this `equity_after` series and the two engines agree
 on it to `1e-6`.
+
+## `ratio_reversion`
+
+Universe is `[R_1 … R_k, H]` in spec order: one or more risk assets and,
+last, the haven they rest in (GLD in the first spec). k ≥ 1, no symbol
+twice. Params: `lookback` (L, integer ≥ 2), `entry_z` (> 0), `exit_z`
+(> −entry_z), `max_hold_days` (integer ≥ 1). Sizing: `gross_leverage` (G).
+
+All prices are `adjclose`. Alignment is the inner join of every symbol on
+date. On the aligned series, for each risk asset i and date t:
+
+- `x_i,t = ln(adjclose_i,t) − ln(adjclose_H,t)`, the log price ratio
+- `mean_i,t`, `sd_i,t`: mean and **sample** standard deviation (ddof = 1) of
+  `x_i` over the trailing window of L bars ending at and including t.
+  Undefined while fewer than L bars exist, or when `sd_i,t == 0`.
+- `z_i,t = (x_i,t − mean_i,t) / sd_i,t`
+
+Each risk asset has its own sleeve with state `s_i ∈ {0, 1}`: 1 holds the
+risk asset, 0 holds the haven; `held_i` counts bars since entry. Replayed
+from the first aligned bar, in order, from history alone. Per bar the exit is
+evaluated before the entry and the two never happen on the same bar:
+
+- `s_i = 1`: exit to 0 if `z_i,t ≥ exit_z` or `held_i ≥ max_hold_days`;
+  else `held_i += 1`.
+- `s_i = 0`: enter 1 if `z_i,t ≤ −entry_z`; `held_i = 0` on entry.
+- Undefined `z_i,t` forces `s_i = 0`.
+
+The rule is long-only and contrarian: a risk asset is held while it is
+cheap against the haven relative to its own recent history, and the haven
+otherwise. There is no short side.
+
+Target weights (fraction of equity) for the bar, with `flat` the number of
+sleeves in state 0:
+
+- `w_i = G / k` if `s_i = 1`, else 0
+- `w_H = G · flat / k`
+
+so the weights always sum to G and none is negative. Both sides evaluate
+these as written, left to right, so the rounding agrees.
+
+Golden `expected_signals.csv` columns are the same as for `pairs_zscore`:
+`date`, `symbol`, `target_weight`, one row per symbol per aligned date,
+including the haven. Tolerance for Go against Python: `1e-9` absolute.

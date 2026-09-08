@@ -4,6 +4,9 @@ import type { Signal } from '../types'
  *  bands: a track from −3σ to +3σ, the exit band shaded, ticks at the entry
  *  thresholds, and a dot for now. */
 export function ZGauge({ signal }: { signal: Signal }) {
+  // A strategy with several sleeves has no single z-score to draw; its
+  // weights say what it is doing.
+  if (signal.entryZ === 0) return null
   const w = 330
   const x = (z: number) => 10 + ((Math.max(-3, Math.min(3, z)) + 3) / 6) * (w - 20)
   const { entryZ, exitZ } = signal
@@ -38,6 +41,7 @@ export function ZGauge({ signal }: { signal: Signal }) {
 
 /** One sentence about what the signal is doing. */
 export function describeSignal(s: Signal, universe: string[] = []): string {
+  if (s.entryZ === 0) return 'No single z-score for this strategy; the weights are its targets.'
   if (!s.zDefined) return 'z-score undefined: not enough bars, or a flat spread.'
   const [a, b] = universe
   switch (s.state) {

@@ -46,6 +46,7 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/spec"
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/pairs"
+	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/ratio"
 	"github.com/chinmay28/bulls-and-bears/server/internal/version"
 	"github.com/chinmay28/bulls-and-bears/server/internal/web"
 )
@@ -327,8 +328,10 @@ func backtestCommand(fs *flag.FlagSet, args []string) error {
 	sp, err := spec.Load(*specPath, time.Now())
 	var refused *spec.Refused
 	if errors.As(err, &refused) && *ignore {
+		// The refusal is the runtime's policy, not a defect in the spec:
+		// the spec it carries is whole and replayable.
 		fmt.Fprintln(os.Stderr, "note:", refused.Reason)
-		sp, err = spec.Load(*specPath, sp.Provenance.GeneratedAt)
+		sp, err = refused.Spec, nil
 	}
 	if err != nil {
 		return err
