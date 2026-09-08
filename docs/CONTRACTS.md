@@ -361,3 +361,36 @@ the previous bar. Before the first rebalance bar `w_H = G` and every
 `w_i = 0`. Both sides evaluate these in the stated order, so the rounding
 agrees. Golden columns and tolerance as for `ratio_reversion`. Researched
 under `fill_at: next_open`.
+
+## `rsi2_reversion`
+
+Universe is `[R_1 … R_k, H]` in spec order, k ≥ 1, no symbol twice.
+Params: `trend_lookback` (T, integer ≥ 2), `rsi_entry` (0 ≤ rsi_entry),
+`rsi_exit` (rsi_entry < rsi_exit ≤ 100), `max_hold_days` (integer ≥ 1).
+The RSI period is **2** and is not a parameter. Sizing: `gross_leverage`
+(G). Alignment is the inner join of every symbol on date; all prices are
+`adjclose`.
+
+Connors' short-horizon pullback: buy a dip in an uptrend, sell the bounce.
+For each risk asset i and bar t (Indicators):
+
+- `rsi_i,t`: Wilder RSI over 2, undefined for `t < 2`.
+- `sma_i,t`: the SMA over T bars, undefined for `t < T−1`.
+
+Each risk asset has a sleeve with state `s_i ∈ {0, 1}` and `held_i`, the
+bars since entry. Replayed from the first aligned bar; per bar the exit is
+evaluated before the entry and the two never happen on the same bar:
+
+- Undefined `rsi_i,t` or `sma_i,t` forces `s_i = 0`.
+- `s_i = 1`: exit to 0 if `rsi_i,t > rsi_exit`, or `held_i ≥ max_hold_days`,
+  or `adjclose_i,t < sma_i,t`; else `held_i += 1`.
+- `s_i = 0`: enter 1 if `adjclose_i,t > sma_i,t` and `rsi_i,t < rsi_entry`;
+  `held_i = 0` on entry.
+
+Every comparison is strict: an RSI exactly on a threshold, or a close
+exactly on the average, leaves the sleeve where it is. Weights, with `flat`
+the number of sleeves in state 0: `w_i = G / k` if `s_i = 1`, else 0;
+`w_H = G · flat / k`. Golden columns and tolerance as for
+`ratio_reversion`. Researched under `fill_at: next_open`, and reported with
+a slippage stress, because a rule that holds for days lives or dies on
+costs.

@@ -52,6 +52,9 @@ def test_every_registered_strategy_name_validates() -> None:
     validate(a_spec(name="rp", strategy="risk_parity_trend", universe=["SPY", "GLD"],
                     params={"trend_lookback": 200, "vol_lookback": 63, "rebalance_days": 21},
                     fill_at="next_open"))
+    validate(a_spec(name="rsi2", strategy="rsi2_reversion", universe=["SPY", "GLD"],
+                    params={"trend_lookback": 200, "rsi_entry": 5, "rsi_exit": 70, "max_hold_days": 5},
+                    fill_at="next_open"))
     validate(a_spec(name="etf_gld_ratio", strategy="ratio_reversion",
                     universe=["SPY", "QQQ", "VTI", "XLK", "GLD"],
                     params={"lookback": 20, "entry_z": 2.0, "exit_z": 0.5, "max_hold_days": 8}))

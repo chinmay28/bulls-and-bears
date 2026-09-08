@@ -134,6 +134,19 @@ var studies = []Study{
 		UniverseHint:    havenHint,
 	},
 	{
+		Name:  "rsi2_reversion",
+		Title: "RSI(2) pullback",
+		Description: "Connors' short-horizon mean reversion: buy an ETF above its 200-day average when " +
+			"its two-day RSI says it is oversold, sell it back for the haven when the RSI recovers, the " +
+			"time stop hits or the trend breaks. Holds for days, so the slippage stress matters; " +
+			"fills at the next open. Paper only until it has earned a live promotion.",
+		Script:          "scripts/rsi2_reversion.py",
+		Strategy:        "rsi2_reversion",
+		DefaultTrainTo:  "2019-12-31",
+		DefaultUniverse: []string{"SPY", "QQQ", "IWM", "GLD"},
+		UniverseHint:    havenHint,
+	},
+	{
 		Name:  "gld_gdx_pairs",
 		Title: "Pairs (GLD/GDX)",
 		Description: "Chan's pairs trade: the cointegrating hedge ratio from the training window, then a " +
