@@ -39,6 +39,10 @@ def test_spec_validates_and_round_trips(tmp_path: Path) -> None:
 
 def test_every_registered_strategy_name_validates() -> None:
     validate(a_spec(strategy="pairs_zscore"))
+    validate(a_spec(name="sma", strategy="sma_trend", universe=["SPY", "GLD"],
+                    params={"lookback": 200, "band": 0.01}))
+    validate(a_spec(name="dm", strategy="dual_momentum", universe=["SPY", "QQQ", "GLD"],
+                    params={"lookback": 252, "top_k": 1, "rebalance_days": 21}))
     validate(a_spec(name="etf_gld_ratio", strategy="ratio_reversion",
                     universe=["SPY", "QQQ", "VTI", "XLK", "GLD"],
                     params={"lookback": 20, "entry_z": 2.0, "exit_z": 0.5, "max_hold_days": 8}))

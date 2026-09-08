@@ -54,7 +54,7 @@ export default function Research() {
               key={study.name}
               study={study}
               disabled={busy || !data.env.tree}
-              onRun={(trainTo) => start(() => api.researchRun(study.name, trainTo))}
+              onRun={(trainTo, universe) => start(() => api.researchRun(study.name, trainTo, universe))}
             />
           ))}
 
@@ -156,13 +156,44 @@ function latestTrainTo(): string {
   return d.toISOString().slice(0, 10)
 }
 
-function StudyCard({ study, disabled, onRun }: { study: Study; disabled: boolean; onRun: (trainTo?: string) => void }) {
+/** parseUniverse reads "SPY, QQQ GLD" as the symbols the server will check. */
+export function parseUniverse(text: string): string[] {
+  return text
+    .split(/[\s,]+/)
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => s.length > 0)
+}
+
+function StudyCard({
+  study,
+  disabled,
+  onRun,
+}: {
+  study: Study
+  disabled: boolean
+  onRun: (trainTo?: string, universe?: string[]) => void
+}) {
   const [trainTo, setTrainTo] = useState(study.defaultTrainTo ?? '')
+  const [universeText, setUniverseText] = useState(study.defaultUniverse.join(', '))
+  const universe = parseUniverse(universeText)
+  const custom = universe.join(',') !== study.defaultUniverse.join(',')
+  const sizeOk = study.universeSize ? universe.length === study.universeSize : universe.length >= 2
   return (
     <Card>
       <div className="title">{study.title}</div>
       <div className="sub" style={{ margin: '4px 0 10px' }}>{study.description}</div>
       <div className="sub mono" style={{ marginBottom: 10 }}>{study.script}</div>
+      <Field label="Symbols" help={study.universeHint + ' Another universe gets its own spec name.'}>
+        <input
+          type="text"
+          value={universeText}
+          onChange={(e) => setUniverseText(e.target.value)}
+          spellCheck={false}
+          autoCapitalize="characters"
+          autoCorrect="off"
+          className="mono"
+        />
+      </Field>
       {study.defaultTrainTo && (
         <Field
           label="Train through"
@@ -173,8 +204,8 @@ function StudyCard({ study, disabled, onRun }: { study: Study; disabled: boolean
       )}
       <button
         className="primary block"
-        disabled={disabled}
-        onClick={() => onRun(study.defaultTrainTo ? trainTo || undefined : undefined)}
+        disabled={disabled || !sizeOk}
+        onClick={() => onRun(study.defaultTrainTo ? trainTo || undefined : undefined, custom ? universe : undefined)}
       >
         Run study
       </button>
@@ -253,7 +284,13 @@ function JobCard({ id, onChanged }: { id: string; onChanged: () => void }) {
           <div className="row between">
             <div className="grow">
               <div className="title">{job.kind === 'setup' ? 'Set up the environment' : job.study || id}</div>
-              <div className="sub">{parts(time(job.started), job.options.trainTo && `train through ${job.options.trainTo}`)}</div>
+                      <div className="sub">
+                {parts(
+                  time(job.started),
+                  job.options.universe?.join(' / '),
+                  job.options.trainTo && `train through ${job.options.trainTo}`,
+                )}
+              </div>
             </div>
             <JobBadge status={job.status} />
           </div>

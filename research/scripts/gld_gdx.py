@@ -30,9 +30,10 @@ from tt.stats.cointegration import engle_granger
 from tt.stats.halflife import halflife_ar1
 from tt.stats.kelly import half_kelly
 from tt.strategies import pairs
+from tt.study import spec_name, symbols
 
-NAME = "gld_gdx_pairs"
-UNIVERSE = ["GLD", "GDX"]
+BASE = "gld_gdx_pairs"
+DEFAULT_UNIVERSE = ["GLD", "GDX"]
 TRAIN = (dt.date(2015, 1, 1), dt.date(2022, 12, 31))
 COSTS = CostModel(commission_usd=0.0, slippage_bps=5.0)
 LOOKBACK, ENTRY, EXIT = 20, 2.0, 0.5
@@ -50,7 +51,9 @@ def _slice(df: pd.DataFrame, lo: dt.date, hi: dt.date) -> pd.DataFrame:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--synthetic", action="store_true", help="use the seeded pair, no network")
-    ap.add_argument("--golden", default=str(REPO_ROOT / "golden" / "gld_gdx"))
+    ap.add_argument("--universe", type=symbols, default=DEFAULT_UNIVERSE,
+                    help="the two symbols, A then B (default %(default)s)")
+    ap.add_argument("--golden", help="parity fixtures directory (default golden/gld_gdx, or golden/<name>)")
     # Where the outputs go. The defaults are the checkout's; the app points
     # them at the runtime's own directories when it runs this.
     ap.add_argument("--specs-dir", type=Path, default=REPO_ROOT / "specs",
@@ -60,20 +63,27 @@ def main() -> int:
     ap.add_argument("--out-dir", type=Path, default=REPO_ROOT / "research" / "out",
                     help="where a rejected spec is written")
     args = ap.parse_args()
+    universe: list[str] = args.universe
+    if len(universe) != 2:
+        print("a pairs study takes exactly two symbols", file=sys.stderr)
+        return 2
+    name = spec_name(BASE, universe, DEFAULT_UNIVERSE)
+    golden = Path(args.golden) if args.golden else (
+        REPO_ROOT / "golden" / ("gld_gdx" if name == BASE else name))
 
     data_dir = args.bars_dir
     if args.synthetic:
         syn = cointegrated_pair(n=2200, seed=7, hedge=1.6)
-        bars = {"GLD": syn["A"], "GDX": syn["B"]}
+        bars = {universe[0]: syn["A"], universe[1]: syn["B"]}
         source_note = "SYNTHETIC (seeded, tt.data.synthetic.cointegrated_pair(n=2200, seed=7))"
     else:
-        bars = fetch(UNIVERSE, TRAIN[0])
+        bars = fetch(universe, TRAIN[0])
         for s, df in bars.items():
             barsio.write_bars(df, data_dir / f"{s}.parquet")
         source_note = "Yahoo Finance via yfinance"
-    last = min(pd.Timestamp(bars[s]["date"].iloc[-1]).date() for s in UNIVERSE)
+    last = min(pd.Timestamp(bars[s]["date"].iloc[-1]).date() for s in universe)
     test = (dt.date(2023, 1, 1), last)
-    test_bars = int((pd.to_datetime(pairs.align(bars, UNIVERSE)["date"]).dt.date >= test[0]).sum())
+    test_bars = int((pd.to_datetime(pairs.align(bars, universe)["date"]).dt.date >= test[0]).sum())
     if not args.synthetic and test_bars < MIN_TEST_BARS:
         print(f"REFUSED: the test window {test[0]}..{test[1]} holds {test_bars} bars; at least "
               f"{MIN_TEST_BARS} (about a year) are needed before an out-of-sample Sharpe means anything.",
@@ -81,7 +91,7 @@ def main() -> int:
         return 2
 
     # Train: cointegration, hedge ratio, half-life.
-    train = pairs.align({s: _slice(bars[s], *TRAIN) for s in UNIVERSE}, UNIVERSE)
+    train = pairs.align({s: _slice(bars[s], *TRAIN) for s in universe}, universe)
     eg = engle_granger(train["a"].to_numpy(), train["b"].to_numpy())
     hl = halflife_ar1(eg.residual)
     max_hold = int(min(60, max(5, round(3 * hl)))) if hl != float("inf") else 30
@@ -90,8 +100,8 @@ def main() -> int:
           f"cointegrated@5% {eg.cointegrated()}, half-life {hl:.1f} bars, max_hold {max_hold}")
 
     # Sizing from train returns at full leverage, then half-Kelly capped at 0.9.
-    tr_train = pairs.replay({s: _slice(bars[s], *TRAIN) for s in UNIVERSE}, UNIVERSE, params, 1.0)
-    res_train = run_pairs(tr_train, train, UNIVERSE, COSTS)
+    tr_train = pairs.replay({s: _slice(bars[s], *TRAIN) for s in universe}, universe, params, 1.0)
+    res_train = run_pairs(tr_train, train, universe, COSTS)
     r = metrics.daily_returns(res_train.equity["equity"].to_numpy())
     gross = half_kelly(float(r.mean()), float(r.var(ddof=1)), cap=0.9) if r.var(ddof=1) > 0 else 0.9
     gross = max(gross, 0.1)
@@ -100,17 +110,17 @@ def main() -> int:
     # Test: out of sample. The strategy is replayed over the whole history —
     # the runtime sees every bar it has, so the state at the first test bar
     # is what it would be live — and the book opens at the test window.
-    tr = pairs.replay(bars, UNIVERSE, params, gross)
-    al = pairs.align(bars, UNIVERSE)
+    tr = pairs.replay(bars, universe, params, gross)
+    al = pairs.align(bars, universe)
     keep = (pd.to_datetime(al["date"]).dt.date >= test[0]).to_numpy()
-    res = run_pairs(tr[keep].reset_index(drop=True), al[keep].reset_index(drop=True), UNIVERSE, COSTS)
+    res = run_pairs(tr[keep].reset_index(drop=True), al[keep].reset_index(drop=True), universe, COSTS)
     eq = res.equity["equity"].to_numpy()
     m = metrics.summary(eq)
     print(f"test {test[0]}..{test[1]}: Sharpe {m['sharpe']:.3f}, max DD {m['max_drawdown']:.3%}, "
           f"DD duration {m['max_drawdown_duration']} bars, trades {len(res.trades)}")
 
     spec = build_spec(
-        name=NAME, strategy=pairs.NAME, universe=UNIVERSE,
+        name=name, strategy=pairs.NAME, universe=universe,
         params={"hedge_ratio": params.hedge_ratio, "lookback": LOOKBACK, "entry_z": ENTRY,
                 "exit_z": EXIT, "max_hold_days": max_hold},
         gross_leverage=gross, max_notional_per_leg_usd=MAX_LEG_USD,
@@ -119,11 +129,11 @@ def main() -> int:
         commission_usd=COSTS.commission_usd, slippage_bps=COSTS.slippage_bps,
     )
     if m["sharpe"] >= 1.0 and not args.synthetic:
-        out = args.specs_dir / f"{NAME}.yaml"
+        out = args.specs_dir / f"{name}.yaml"
         write_spec(spec, out)
         print(f"PROMOTED: wrote {out}")
     else:
-        out = args.out_dir / f"{NAME}.rejected.yaml"
+        out = args.out_dir / f"{name}.rejected.yaml"
         write_spec(spec, out)
         why = "synthetic data" if args.synthetic else f"OOS Sharpe {m['sharpe']:.2f} < 1.0"
         print(f"NOT PROMOTED ({why}): wrote {out}")
@@ -131,15 +141,15 @@ def main() -> int:
     # Goldens: the whole history, signals for every aligned date, the
     # equity curve from the test window on.
     golden_bars = bars
-    sig = pairs.signals(golden_bars, UNIVERSE, params, gross)
+    sig = pairs.signals(golden_bars, universe, params, gross)
     note = (
-        f"# golden/gld_gdx\n\nParity fixtures for `pairs_zscore` (docs/PLAN.md §4.3, §4.4).\n\n"
+        f"# golden/{golden.name}\n\nParity fixtures for `pairs_zscore` (docs/PLAN.md §4.3, §4.4).\n\n"
         f"Source: {source_note}.\nWritten by research/scripts/gld_gdx.py on "
         f"{dt.datetime.now(dt.UTC):%Y-%m-%d}.\n\n"
         "Regenerate with `make golden` and commit the result together with any\n"
         "change to docs/CONTRACTS.md or either implementation.\n"
     )
-    files = write_golden(Path(args.golden), bars=golden_bars, spec=spec, signals=sig,
+    files = write_golden(golden, bars=golden_bars, spec=spec, signals=sig,
                          equity=res.equity, metrics=m, note=note)
     for f in files:
         print("wrote", f)

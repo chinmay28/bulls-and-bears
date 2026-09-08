@@ -116,12 +116,15 @@ Five tabs, in HostMan's shape:
   and installs it, if the runtime would run it; a spec's own screen removes
   it again.
 - **Research** — the studies under `research/scripts`, run on the machine
-  from the phone. **Set up the environment** finds or downloads `uv` and
-  installs the Python side into the data directory; **Run study** fetches
-  from Yahoo, sweeps on the training window, judges once out of sample and
-  installs the spec only if it clears the floor — the same gate the script
-  applies from a terminal. The log streams to the phone as it runs; a job
-  can be cancelled; every log is kept.
+  from the phone: the ETF/GLD ratio reversion, Faber's moving-average
+  trend, Antonacci's dual momentum, and Chan's pairs trade, each on the
+  symbols typed into its card. **Set up the environment** finds or
+  downloads `uv` and installs the Python side into the data directory;
+  **Run study** fetches from Yahoo, sweeps on the training window, judges
+  once on at least a year out of sample and installs the spec only if it
+  clears the floor — the same gate the script applies from a terminal. The
+  log streams to the phone as it runs; a job can be cancelled; every log is
+  kept.
 - **Book** — equity over time, positions marked to market, working orders,
   fills with the price they got.
 - **Settings** — version, the halt state, the bars per symbol and whether

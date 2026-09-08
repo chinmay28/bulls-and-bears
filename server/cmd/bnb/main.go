@@ -47,7 +47,9 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/spec"
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/pairs"
+	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/momentum"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/ratio"
+	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/trend"
 	"github.com/chinmay28/bulls-and-bears/server/internal/version"
 	"github.com/chinmay28/bulls-and-bears/server/internal/web"
 )

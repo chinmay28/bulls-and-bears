@@ -75,8 +75,9 @@ func (s *Server) handleResearchRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Study   string `json:"study"`
-		TrainTo string `json:"trainTo"`
+		Study    string   `json:"study"`
+		TrainTo  string   `json:"trainTo"`
+		Universe []string `json:"universe"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -86,7 +87,7 @@ func (s *Server) handleResearchRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "no study named")
 		return
 	}
-	s.startResearch(w, research.Run, body.Study, research.Options{TrainTo: strings.TrimSpace(body.TrainTo)})
+	s.startResearch(w, research.Run, body.Study, research.Options{TrainTo: strings.TrimSpace(body.TrainTo), Universe: body.Universe})
 }
 
 func (s *Server) startResearch(w http.ResponseWriter, kind research.Kind, study string, opts research.Options) {
@@ -99,7 +100,7 @@ func (s *Server) startResearch(w http.ResponseWriter, kind research.Kind, study 
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.Log.Info("research job started", "id", v.ID, "kind", v.Kind, "study", v.Study, "trainTo", v.Options.TrainTo)
+	s.Log.Info("research job started", "id", v.ID, "kind", v.Kind, "study", v.Study, "trainTo", v.Options.TrainTo, "universe", v.Options.Universe)
 	writeJSON(w, http.StatusAccepted, v)
 }
 

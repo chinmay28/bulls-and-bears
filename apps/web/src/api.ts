@@ -82,8 +82,11 @@ export const api = {
   researchSetup: () => request<ResearchJob>('/api/research/setup', { method: 'POST' }),
   /** Runs a study with its output pointed at this machine's specs and bars.
    *  The spec is promoted only if the study's own gate passes it. */
-  researchRun: (study: string, trainTo?: string) =>
-    request<ResearchJob>('/api/research/runs', { method: 'POST', ...json({ study, trainTo: trainTo ?? '' }) }),
+  researchRun: (study: string, trainTo?: string, universe?: string[]) =>
+    request<ResearchJob>('/api/research/runs', {
+      method: 'POST',
+      ...json({ study, trainTo: trainTo ?? '', universe: universe ?? [] }),
+    }),
   /** The job and its log from a byte offset, so polling only carries what is new. */
   researchJob: (id: string, from = 0) =>
     request<JobLog>(`/api/research/jobs/${encodeURIComponent(id)}?from=${from}`),
