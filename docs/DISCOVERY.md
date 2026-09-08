@@ -174,3 +174,29 @@ explicit per spec.
 Not done: the §9 webhook for promotions and expiries. The re-validation
 history is on the Research tab and in `<data>/research/revalidate.json`,
 and an expiry shows on the next run's journal as a refused spec.
+
+## Execution timing
+
+The strategy expansion plan asks every new strategy to be researched under
+`fill_at: next_open` — the targets read at a bar's close fill at the next
+bar's adjusted open — because a backtest that fills at the close it has just
+read overstates a short-horizon rule. Both engines now implement that fill
+(docs/CONTRACTS.md, Execution) and a spec's `execution` block says which it
+was researched with; a spec without the block is `same_close_legacy`.
+
+What the runtime actually does is neither, exactly. The scheduler fires once
+a day ten minutes before the close; the runner appends the last quote as the
+day's bar, asks the strategy for targets on it, and trades at that quote. That
+is `same_close_legacy` with a ten-minute gap on both the signal and the fill,
+which the slippage model is there to cover. A `next_open` spec needs a run
+the runtime does not have: at the open, targets from bars through the
+previous close (no quote bar appended), orders at the opening quote.
+
+Until that open-session run exists, the close-time run **does not arm** a
+`next_open` spec and journals why (`fills at next_open: this run fills at the
+close; not armed`). This keeps the paper book honest — it never trades a
+model a spec was not backtested on — at the cost that the new strategies are
+backtest- and research-only until the open session is built. That is the
+next runtime task: `sched.Session` gains an open, `sched.Loop` a second fire
+time, the runner a phase that skips the quote bar and arms only the specs
+whose fill matches, and run ids distinguish the two sessions.

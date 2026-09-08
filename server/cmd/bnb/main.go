@@ -386,7 +386,11 @@ func backtestCommand(fs *flag.FlagSet, args []string) error {
 			return err
 		}
 	}
-	res, err := backtest.StrategyFrom(st, hist, start, backtest.Costs{CommissionUSD: sp.Provenance.CostModel.CommissionUSD, SlippageBps: sp.Provenance.CostModel.SlippageBps})
+	fill, err := backtest.ParseFill(sp.Execution.FillAt)
+	if err != nil {
+		return err
+	}
+	res, err := backtest.StrategyFromFill(st, hist, start, backtest.Costs{CommissionUSD: sp.Provenance.CostModel.CommissionUSD, SlippageBps: sp.Provenance.CostModel.SlippageBps}, fill)
 	if err != nil {
 		return err
 	}

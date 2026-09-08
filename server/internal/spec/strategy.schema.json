@@ -25,6 +25,16 @@
       "description": "Strategy-specific. pairs_zscore takes hedge_ratio, lookback, entry_z, exit_z, max_hold_days. ratio_reversion takes lookback, entry_z, exit_z, max_hold_days. sma_trend takes lookback, band. dual_momentum takes lookback, top_k, rebalance_days.",
       "additionalProperties": { "type": "number" }
     },
+    "execution": {
+      "description": "When the signal is read and when the order fills (docs/CONTRACTS.md, Execution). A spec without this block fills at the same close the signal was read at, which is the loop the first four strategies were researched with; every spec research writes now says so explicitly.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signal_at", "fill_at"],
+      "properties": {
+        "signal_at": { "type": "string", "enum": ["close"] },
+        "fill_at": { "type": "string", "enum": ["next_open", "same_close_legacy"] }
+      }
+    },
     "sizing": {
       "type": "object",
       "additionalProperties": false,
@@ -53,6 +63,11 @@
           }
         },
         "research_git_sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "research_study": {
+          "description": "The study script that produced the spec (server/internal/research knows it by this name), so a spec is re-validated by the study that earned it, not guessed from the strategy: one strategy can serve several studies.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
         "generated_at": { "type": "string", "format": "date-time" },
         "ttl_days": { "type": "integer", "minimum": 1 }
       }

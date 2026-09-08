@@ -52,33 +52,46 @@ def build_spec(
     oos_max_drawdown: float,
     commission_usd: float,
     slippage_bps: float,
+    fill_at: str,
+    research_study: str | None = None,
     ttl_days: int = 90,
     generated_at: dt.datetime | None = None,
     research_git_sha: str | None = None,
     version: int = 1,
 ) -> dict[str, Any]:
-    """Assemble a spec mapping in the schema's shape."""
+    """Assemble a spec mapping in the schema's shape.
+
+    ``fill_at`` is the execution model the backtest used (docs/CONTRACTS.md,
+    Execution) and is always written: a spec is explicit about the fill it
+    earned its numbers with. ``research_study`` names the script that
+    produced the spec so it is re-validated by that study, not guessed from
+    the strategy.
+    """
     now = generated_at or dt.datetime.now(dt.UTC)
+    provenance: dict[str, Any] = {
+        "train_window": {"from": train_window[0].isoformat(), "to": train_window[1].isoformat()},
+        "test_window": {"from": test_window[0].isoformat(), "to": test_window[1].isoformat()},
+        "oos_sharpe": float(oos_sharpe),
+        "oos_max_drawdown": float(oos_max_drawdown),
+        "cost_model": {"commission_usd": float(commission_usd), "slippage_bps": float(slippage_bps)},
+        "research_git_sha": research_git_sha or git_sha(),
+        "generated_at": now.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ttl_days": int(ttl_days),
+    }
+    if research_study is not None:
+        provenance["research_study"] = research_study
     return {
         "name": name,
         "version": version,
         "strategy": strategy,
         "universe": list(universe),
         "params": {k: float(v) for k, v in params.items()},
+        "execution": {"signal_at": "close", "fill_at": fill_at},
         "sizing": {
             "gross_leverage": float(gross_leverage),
             "max_notional_per_leg_usd": float(max_notional_per_leg_usd),
         },
-        "provenance": {
-            "train_window": {"from": train_window[0].isoformat(), "to": train_window[1].isoformat()},
-            "test_window": {"from": test_window[0].isoformat(), "to": test_window[1].isoformat()},
-            "oos_sharpe": float(oos_sharpe),
-            "oos_max_drawdown": float(oos_max_drawdown),
-            "cost_model": {"commission_usd": float(commission_usd), "slippage_bps": float(slippage_bps)},
-            "research_git_sha": research_git_sha or git_sha(),
-            "generated_at": now.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "ttl_days": int(ttl_days),
-        },
+        "provenance": provenance,
     }
 
 

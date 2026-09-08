@@ -45,9 +45,29 @@ type Spec struct {
 	Strategy   string
 	Universe   []string
 	Params     strategy.Params
+	Execution  Execution
 	Sizing     strategy.Sizing
 	Provenance Provenance
 }
+
+// Execution is when the signal is read and when the order fills
+// (docs/CONTRACTS.md, Execution). A spec without the block is the loop the
+// first strategies were researched with: read at the close, filled at that
+// close.
+type Execution struct {
+	SignalAt string
+	FillAt   string
+}
+
+// The execution values the schema allows.
+const (
+	SignalAtClose       = "close"
+	FillNextOpen        = "next_open"
+	FillSameCloseLegacy = "same_close_legacy"
+)
+
+// LegacyExecution is what a spec without an execution block means.
+var LegacyExecution = Execution{SignalAt: SignalAtClose, FillAt: FillSameCloseLegacy}
 
 // Provenance is the backtest that earned the spec the right to trade.
 type Provenance struct {
@@ -57,8 +77,12 @@ type Provenance struct {
 	OOSMaxDrawdown float64
 	CostModel      CostModel
 	ResearchGitSHA string
-	GeneratedAt    time.Time
-	TTLDays        int
+	// ResearchStudy names the study script that produced the spec, so it is
+	// re-validated by that study rather than guessed from the strategy.
+	// Empty for a spec written before the field existed.
+	ResearchStudy string
+	GeneratedAt   time.Time
+	TTLDays       int
 }
 
 // Window is a date range, inclusive, midnight UTC.
@@ -331,7 +355,12 @@ type file struct {
 	Strategy string             `json:"strategy"`
 	Universe []string           `json:"universe"`
 	Params   map[string]float64 `json:"params"`
-	Sizing   struct {
+	// Execution is optional in the schema; nil means LegacyExecution.
+	Execution *struct {
+		SignalAt string `json:"signal_at"`
+		FillAt   string `json:"fill_at"`
+	} `json:"execution"`
+	Sizing struct {
 		GrossLeverage        float64 `json:"gross_leverage"`
 		MaxNotionalPerLegUSD float64 `json:"max_notional_per_leg_usd"`
 	} `json:"sizing"`
@@ -345,6 +374,7 @@ type file struct {
 			SlippageBps   float64 `json:"slippage_bps"`
 		} `json:"cost_model"`
 		ResearchGitSHA string `json:"research_git_sha"`
+		ResearchStudy  string `json:"research_study"`
 		GeneratedAt    string `json:"generated_at"`
 		TTLDays        int    `json:"ttl_days"`
 	} `json:"provenance"`
@@ -388,12 +418,17 @@ func (f *file) spec() (*Spec, error) {
 	for k, v := range f.Params {
 		params[k] = v
 	}
+	exec := LegacyExecution
+	if f.Execution != nil {
+		exec = Execution{SignalAt: f.Execution.SignalAt, FillAt: f.Execution.FillAt}
+	}
 	return &Spec{
-		Name:     f.Name,
-		Version:  f.Version,
-		Strategy: f.Strategy,
-		Universe: append([]string(nil), f.Universe...),
-		Params:   params,
+		Name:      f.Name,
+		Version:   f.Version,
+		Strategy:  f.Strategy,
+		Universe:  append([]string(nil), f.Universe...),
+		Params:    params,
+		Execution: exec,
 		Sizing: strategy.Sizing{
 			GrossLeverage:        f.Sizing.GrossLeverage,
 			MaxNotionalPerLegUSD: f.Sizing.MaxNotionalPerLegUSD,
@@ -408,6 +443,7 @@ func (f *file) spec() (*Spec, error) {
 				SlippageBps:   p.CostModel.SlippageBps,
 			},
 			ResearchGitSHA: p.ResearchGitSHA,
+			ResearchStudy:  p.ResearchStudy,
 			GeneratedAt:    gen.UTC(),
 			TTLDays:        p.TTLDays,
 		},

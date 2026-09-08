@@ -288,9 +288,14 @@ func (s *Server) handleBacktest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
-	res, err := backtest.StrategyFrom(st, hist, found.Provenance.TestWindow.From, backtest.Costs{
+	fill, err := backtest.ParseFill(found.Execution.FillAt)
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	res, err := backtest.StrategyFromFill(st, hist, found.Provenance.TestWindow.From, backtest.Costs{
 		CommissionUSD: found.Provenance.CostModel.CommissionUSD, SlippageBps: found.Provenance.CostModel.SlippageBps,
-	})
+	}, fill)
 	if err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return

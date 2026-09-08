@@ -19,7 +19,8 @@ from typing import Any
 import pandas as pd
 
 from tt.backtest import metrics
-from tt.backtest.engine import CostModel, Result, run
+from tt.backtest.engine import CostModel, Fill, Result, run
+from tt.data import adjust
 from tt.data import bars as barsio
 from tt.data.checks import check
 from tt.data.yahoo import fetch
@@ -155,16 +156,41 @@ def slice_window(df: pd.DataFrame, lo: dt.date, hi: dt.date) -> pd.DataFrame:
     return df[(d >= lo) & (d <= hi)].reset_index(drop=True)
 
 
-def backtest_weights(prices: pd.DataFrame, weights: pd.DataFrame, start: dt.date) -> Result:
-    """Open the book at ``start`` and run the engine over aligned prices and weights."""
+def opens_for(prices: pd.DataFrame, bars: dict[str, pd.DataFrame], universe: list[str]) -> pd.DataFrame:
+    """The adjusted opens on exactly the dates of an aligned ``prices`` frame."""
+    o = adjust.aligned(bars, universe, "open")
+    out = prices[["date"]].merge(o, on="date", how="left")
+    if out[universe].isna().any().any():
+        raise ValueError("opens_for: a bar has no open on an aligned date")
+    return out.reset_index(drop=True)
+
+
+def backtest_weights(
+    prices: pd.DataFrame,
+    weights: pd.DataFrame,
+    start: dt.date,
+    *,
+    fill: Fill,
+    opens: pd.DataFrame | None = None,
+    costs: CostModel = COSTS,
+) -> Result:
+    """Open the book at ``start`` and run the engine over aligned prices and weights.
+
+    ``opens`` (from ``opens_for``) is needed for ``Fill.NEXT_OPEN``.
+    """
     keep = (pd.to_datetime(prices["date"]).dt.date >= start).to_numpy()
-    return run(prices[keep].reset_index(drop=True), weights[keep].reset_index(drop=True), COSTS)
+    o = opens[keep].reset_index(drop=True) if opens is not None else None
+    return run(prices[keep].reset_index(drop=True), weights[keep].reset_index(drop=True), costs,
+               fill=fill, opens=o)
 
 
-def hold(prices: pd.DataFrame, universe: list[str], symbol: str, start: dt.date) -> float:
+def hold(
+    prices: pd.DataFrame, universe: list[str], symbol: str, start: dt.date, *,
+    fill: Fill = Fill.SAME_CLOSE, opens: pd.DataFrame | None = None,
+) -> float:
     """Buy-and-hold one symbol through the same engine: its Sharpe."""
     w = pd.DataFrame({s: [1.0 if s == symbol else 0.0] * len(prices) for s in universe})
-    eq = backtest_weights(prices, w, start).equity["equity"].to_numpy()
+    eq = backtest_weights(prices, w, start, fill=fill, opens=opens).equity["equity"].to_numpy()
     return metrics.sharpe(metrics.daily_returns(eq))
 
 
@@ -186,8 +212,14 @@ def emit(
     signals: pd.DataFrame,
     data: Data,
     script: str,
+    fill: Fill,
+    study: str,
 ) -> int:
-    """Write the spec where it belongs and the goldens; return the exit code."""
+    """Write the spec where it belongs and the goldens; return the exit code.
+
+    ``fill`` is the execution model ``oos`` was run with and ``study`` the
+    name the app knows this script by; both go into the spec.
+    """
     m = summary(oos)
     spec = build_spec(
         name=name, strategy=strategy, universe=universe, params=params,
@@ -195,6 +227,7 @@ def emit(
         train_window=win.train, test_window=win.test,
         oos_sharpe=float(m["sharpe"]), oos_max_drawdown=float(m["max_drawdown"]),
         commission_usd=COSTS.commission_usd, slippage_bps=COSTS.slippage_bps,
+        fill_at=fill.value, research_study=study,
     )
     if m["sharpe"] >= 1.0 and data.real:
         out = args.specs_dir / f"{name}.yaml"

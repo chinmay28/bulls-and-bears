@@ -25,12 +25,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tt import study
 from tt.backtest import metrics
+from tt.backtest.engine import Fill
 from tt.stats.kelly import half_kelly
 from tt.strategies import momentum
 
 BASE = "dual_momentum"
 DEFAULT_UNIVERSE = ["SPY", "QQQ", "VTI", "XLK", "GLD"]
 START = dt.date(2005, 1, 1)
+# Researched with the same-close loop (docs/CONTRACTS.md, Execution); a re-run
+# under next_open is a separate change with its own goldens.
+FILL = Fill.SAME_CLOSE
 # Three to twelve months of momentum, one or two holdings, weekly or monthly turns.
 LOOKBACKS = [63, 126, 189, 252]
 TOP_K = [1, 2]
@@ -66,7 +70,7 @@ def main() -> int:
         print(f"  lookback {p.lookback:3d} top {p.top_k} every {p.rebalance_days:2d}: "
               f"Sharpe {sh:.2f}, {sw} changes")
     print("train buy-and-hold Sharpe: " + ", ".join(
-        f"{s} {study.hold(train_prices, universe, s, win.train[0]):.2f}" for s in universe))
+        f"{s} {study.hold(train_prices, universe, s, win.train[0], fill=FILL):.2f}" for s in universe))
     best, _, _, best_res = rows[0]
 
     r = metrics.daily_returns(best_res.equity["equity"].to_numpy())
@@ -80,13 +84,14 @@ def main() -> int:
     keep = (pd.to_datetime(tr["date"]).dt.date >= win.test[0]).to_numpy()
     print(study.describe("test", oos, {"changes": momentum.switches(tr[keep].reset_index(drop=True), universe)}))
     print("test buy-and-hold Sharpe: " + ", ".join(
-        f"{s} {study.hold(aligned, universe, s, win.test[0]):.2f}" for s in universe))
+        f"{s} {study.hold(aligned, universe, s, win.test[0], fill=FILL):.2f}" for s in universe))
 
     return study.emit(
         args=args, name=name, strategy=momentum.NAME, universe=universe,
         params={"lookback": best.lookback, "top_k": best.top_k, "rebalance_days": best.rebalance_days},
         gross=gross, win=win, oos=oos,
         signals=momentum.signals(data.bars, universe, best, gross), data=data, script="dual_momentum.py",
+        fill=FILL, study="dual_momentum",
     )
 
 

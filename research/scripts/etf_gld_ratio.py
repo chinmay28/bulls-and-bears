@@ -30,13 +30,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tt import study
 from tt.backtest import metrics
-from tt.backtest.engine import Result
+from tt.backtest.engine import Fill, Result
 from tt.stats.kelly import half_kelly
 from tt.strategies import ratio
 
 BASE = "etf_gld_ratio"
 DEFAULT_UNIVERSE = ["SPY", "QQQ", "VTI", "XLK", "GLD"]
 START = dt.date(2005, 1, 1)  # GLD listed 2004-11; VTI, XLK, QQQ, SPY are older
+# Researched with the same-close loop (docs/CONTRACTS.md, Execution); a re-run
+# under next_open is a separate change with its own goldens.
+FILL = Fill.SAME_CLOSE
 NO_TIME_STOP = 9999
 
 # The grid is fixed before the data is looked at. Lookbacks span a fortnight
@@ -108,7 +111,7 @@ def main() -> int:
         print(f"  L={p.lookback:3d} entry={p.entry_z:.1f} exit={p.exit_z:+.1f} stop={p.max_hold_days:4d}: "
               f"Sharpe {t.sharpe:.2f}, switches/yr {t.switches_per_year:.0f}")
     print("train buy-and-hold Sharpe: " + ", ".join(
-        f"{s} {study.hold(train_prices, universe, s, win.train[0]):.2f}" for s in universe))
+        f"{s} {study.hold(train_prices, universe, s, win.train[0], fill=FILL):.2f}" for s in universe))
     print(f"share of configurations with train Sharpe >= 1.0: {sum(t.sharpe >= 1 for t in trials) / len(trials):.1%}")
     p = best.params
     print(f"\nchosen ({why}): L={p.lookback} entry={p.entry_z} exit={p.exit_z} max_hold={p.max_hold_days}; "
@@ -128,7 +131,7 @@ def main() -> int:
     keep = (pd.to_datetime(tr["date"]).dt.date >= win.test[0]).to_numpy()
     print(study.describe("test", oos, {"switches": ratio.switches(tr[keep].reset_index(drop=True), universe)}))
     print("test buy-and-hold Sharpe: " + ", ".join(
-        f"{s} {study.hold(aligned, universe, s, win.test[0]):.2f}" for s in universe))
+        f"{s} {study.hold(aligned, universe, s, win.test[0], fill=FILL):.2f}" for s in universe))
 
     return study.emit(
         args=args, name=name, strategy=ratio.NAME, universe=universe,
@@ -136,6 +139,7 @@ def main() -> int:
                 "max_hold_days": p.max_hold_days},
         gross=gross, win=win, oos=oos,
         signals=ratio.signals(data.bars, universe, p, gross), data=data, script="etf_gld_ratio.py",
+        fill=FILL, study="etf_gld_ratio",
     )
 
 
