@@ -324,3 +324,40 @@ Both comparisons are strict: a close exactly on a channel leaves the sleeve
 where it is. Weights, with `flat` the number of sleeves in state 0:
 `w_i = G / k` if `s_i = 1`, else 0; `w_H = G · flat / k`. Golden columns and
 tolerance as for `ratio_reversion`. Researched under `fill_at: next_open`.
+
+## `risk_parity_trend`
+
+Universe is `[R_1 … R_k, H]` in spec order, k ≥ 1, no symbol twice.
+Params: `trend_lookback` (T, integer ≥ 2), `vol_lookback` (V, integer ≥ 2),
+`rebalance_days` (R, integer ≥ 1). Sizing: `gross_leverage` (G). Alignment
+is the inner join of every symbol on date; all prices are `adjclose`;
+aligned bars are indexed `t = 0, 1, …`.
+
+The first strategy whose weights are not on/off: an eligible asset's share
+of the book is set by its own volatility, so the quiet ones carry more of
+it and the wild ones less (inverse-volatility "risk parity"), behind a
+trend filter. For each risk asset i and bar t (Indicators):
+
+- `sma_i,t`: the SMA over T bars, undefined for `t < T−1`.
+- `σ_i,t`: the realised volatility over V returns, undefined for `t < V`.
+- i is **eligible** at t when both are defined, `adjclose_i,t > sma_i,t`
+  (strict) and `σ_i,t > 0`.
+
+Bar t is a **rebalance bar** when `t ≥ W` and `(t − W) mod R = 0`, with
+`W = max(T, V)`. On a rebalance bar, with `A` the eligible assets in
+universe order and `n = |A|`:
+
+- `raw_i = 1 / σ_i,t` for i in A; `sum_raw = Σ_A raw_i`, accumulated in
+  universe order
+- `active_budget = G · n / k`, evaluated as `(G · n) / k`
+- `w_i = active_budget · raw_i / sum_raw`, evaluated as
+  `(active_budget · raw_i) / sum_raw`, for i in A; `w_i = 0` otherwise
+- `w_H = G · (k − n) / k`, evaluated as `(G · (k − n)) / k`
+
+so each ineligible sleeve's share rests in the haven and the eligible
+sleeves' shares are pooled and split by inverse volatility, never
+negative, never levered. On any other bar every weight is unchanged from
+the previous bar. Before the first rebalance bar `w_H = G` and every
+`w_i = 0`. Both sides evaluate these in the stated order, so the rounding
+agrees. Golden columns and tolerance as for `ratio_reversion`. Researched
+under `fill_at: next_open`.

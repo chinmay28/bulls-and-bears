@@ -121,6 +121,19 @@ var studies = []Study{
 		UniverseHint:    havenHint,
 	},
 	{
+		Name:  "risk_parity_trend",
+		Title: "Risk-parity trend",
+		Description: "Inverse-volatility weights behind a trend filter: every few weeks the ETFs above " +
+			"their moving average share the book in proportion to one over their recent volatility, " +
+			"the rest of the book rests in the haven. The first strategy whose weights are not on/off. " +
+			"Trend and volatility windows are chosen on the training window; fills at the next open.",
+		Script:          "scripts/risk_parity_trend.py",
+		Strategy:        "risk_parity_trend",
+		DefaultTrainTo:  "2019-12-31",
+		DefaultUniverse: []string{"SPY", "QQQ", "IWM", "TLT", "GLD"},
+		UniverseHint:    havenHint,
+	},
+	{
 		Name:  "gld_gdx_pairs",
 		Title: "Pairs (GLD/GDX)",
 		Description: "Chan's pairs trade: the cointegrating hedge ratio from the training window, then a " +
