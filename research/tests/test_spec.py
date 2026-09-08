@@ -22,6 +22,7 @@ def a_spec(**over):
         test_window=(dt.date(2023, 1, 1), dt.date(2026, 8, 31)),
         oos_sharpe=1.32, oos_max_drawdown=-0.087, commission_usd=0, slippage_bps=5,
         generated_at=dt.datetime(2026, 9, 6, tzinfo=dt.UTC), research_git_sha="abc1234",
+        fill_at="same_close_legacy",
     )
     kw.update(over)
     return build_spec(**kw)

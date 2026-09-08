@@ -15,6 +15,22 @@ Parquet, one file per symbol, schema in docs/PLAN.md §4.1: `date` (date32),
 Alignment of two symbols is an inner join on `date`. Bars a symbol has that
 the other lacks are dropped before anything is computed.
 
+## Adjusted OHLC
+
+`adjclose` is split- and dividend-adjusted; `open`, `high`, `low` and `close`
+are raw. Anything that reads a high, a low or an open — a channel, a
+next-open fill — uses the adjusted value, or a split reads as a crash. Per
+bar:
+
+- `f_t = adjclose_t / close_t` (`close_t > 0` by the invariants; a
+  non-positive close is a data error, not a factor of zero)
+- `adjopen_t = open_t · f_t`, `adjhigh_t = high_t · f_t`, `adjlow_t = low_t · f_t`
+
+Both sides compute the factor first and multiply once, in that order, so
+the values agree bit for bit. Python: `tt.data.adjust`; Go: `bars.AdjustFactor`,
+`bars.AdjustedOpen`, `bars.AdjustedHigh`, `bars.AdjustedLow`. The stored bar
+schema is unchanged.
+
 ## `pairs_zscore`
 
 Universe is exactly two symbols, `[A, B]`, in spec order. Params:
@@ -91,6 +107,42 @@ the spec's `test_window.from`. Per bar, in this order, with `p` the bar's
 Starting cash is 10,000. Fractional shares are assumed. The golden
 `equity_curve.csv` is this `equity_after` series and the two engines agree
 on it to `1e-6`.
+
+## Execution
+
+A spec's `execution` block says when the signal is read and when the order
+fills. `signal_at` is always `close`: a strategy's targets for bar t are a
+function of bars up to and including t. `fill_at` is one of:
+
+- `same_close_legacy`: the loop above. The targets read at bar t's close
+  are filled at that same `adjclose`. This is what the first four strategies
+  were researched with and what the runtime's close-time run approximates
+  (it reads the last quote a few minutes before the close, appends it as the
+  day's bar, and trades at it). A spec **without** an `execution` block is
+  `same_close_legacy`; every spec research writes now says which it is.
+- `next_open`: the targets read at bar t's close are filled at bar t+1's
+  `adjopen` (Adjusted OHLC above). A signal cannot trade at a price that was
+  known when it was computed. Per bar, in this order, with `o` the bar's
+  `adjopen` and `p` its `adjclose` per symbol:
+
+  1. If a target `w` is pending (read at the previous bar's close):
+     `equity = cash + Σ shares · o`; `target_shares = w · equity / o`;
+     `delta = target_shares − shares`; `traded = Σ |delta| · o`; `orders`,
+     `cost` as above; `cash = cash − Σ delta · o − cost`;
+     `shares = target_shares`.
+  2. record `equity_after = cash + Σ shares · p` for the bar
+  3. the bar's own target `w_t` becomes the pending target.
+
+  The first bar of the run has no pending target and does not trade; the
+  last bar's target is never filled. The run opens at the first bar on or
+  after the spec's `test_window.from` with nothing pending, so its first fill
+  is at the second bar's open.
+
+The golden `equity_curve.csv` is the `equity_after` series of whichever fill
+the golden `spec.yaml` names; `golden/next_open/` is a synthetic fixture —
+gaps, a split-like factor change, target flips, a no-op target, a final
+unfilled signal — that holds the two `next_open` engines to `1e-6` on their
+own.
 
 ## `ratio_reversion`
 

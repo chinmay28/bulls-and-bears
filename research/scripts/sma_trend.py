@@ -24,12 +24,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tt import study
 from tt.backtest import metrics
+from tt.backtest.engine import Fill
 from tt.stats.kelly import half_kelly
 from tt.strategies import trend
 
 BASE = "sma_trend"
 DEFAULT_UNIVERSE = ["SPY", "QQQ", "VTI", "XLK", "GLD"]
 START = dt.date(2005, 1, 1)
+# Researched with the same-close loop (docs/CONTRACTS.md, Execution); a re-run
+# under next_open is a separate change with its own goldens.
+FILL = Fill.SAME_CLOSE
 # Faber's 10-month average is about 210 trading days; the grid brackets it.
 LOOKBACKS = [50, 100, 150, 200, 250]
 BANDS = [0.0, 0.01, 0.02, 0.03]
@@ -62,7 +66,7 @@ def main() -> int:
     for p, sh, sw, _ in rows[:6]:
         print(f"  lookback {p.lookback:3d} band {p.band:.2f}: Sharpe {sh:.2f}, {sw} switches")
     print("train buy-and-hold Sharpe: " + ", ".join(
-        f"{s} {study.hold(train_prices, universe, s, win.train[0]):.2f}" for s in universe))
+        f"{s} {study.hold(train_prices, universe, s, win.train[0], fill=FILL):.2f}" for s in universe))
     best, _, _, best_res = rows[0]
 
     r = metrics.daily_returns(best_res.equity["equity"].to_numpy())
@@ -75,12 +79,13 @@ def main() -> int:
     keep = (pd.to_datetime(tr["date"]).dt.date >= win.test[0]).to_numpy()
     print(study.describe("test", oos, {"switches": trend.switches(tr[keep].reset_index(drop=True), universe)}))
     print("test buy-and-hold Sharpe: " + ", ".join(
-        f"{s} {study.hold(aligned, universe, s, win.test[0]):.2f}" for s in universe))
+        f"{s} {study.hold(aligned, universe, s, win.test[0], fill=FILL):.2f}" for s in universe))
 
     return study.emit(
         args=args, name=name, strategy=trend.NAME, universe=universe,
         params={"lookback": best.lookback, "band": best.band}, gross=gross, win=win, oos=oos,
         signals=trend.signals(data.bars, universe, best, gross), data=data, script="sma_trend.py",
+        fill=FILL, study="sma_trend",
     )
 
 

@@ -163,6 +163,14 @@ func (r *Runner) Run(ctx context.Context, runID string) (Outcome, error) {
 		case stages != nil && stage.Of(stages, l.Spec.Name) != stage.Live:
 			so.Name = l.Spec.Name
 			so.Reason = "paper only: not promoted to live"
+		case l.Spec.Execution.FillAt != spec.FillSameCloseLegacy:
+			// This run reads the last quote before the close and trades at
+			// it, which is the same_close_legacy fill. A spec researched
+			// under next_open needs a run at the open that this runtime
+			// does not have yet (docs/DISCOVERY.md, "Execution timing");
+			// running it here would trade a model it was not backtested on.
+			so.Name = l.Spec.Name
+			so.Reason = "fills at " + l.Spec.Execution.FillAt + ": this run fills at the close; not armed"
 		default:
 			so.Name = l.Spec.Name
 			st, err := strategy.New(l.Spec.Strategy, l.Spec.Universe, l.Spec.Params, l.Spec.Sizing)

@@ -127,6 +127,7 @@ def main() -> int:
         train_window=TRAIN, test_window=test,
         oos_sharpe=float(m["sharpe"]), oos_max_drawdown=float(m["max_drawdown"]),
         commission_usd=COSTS.commission_usd, slippage_bps=COSTS.slippage_bps,
+        fill_at="same_close_legacy", research_study="gld_gdx_pairs",
     )
     if m["sharpe"] >= 1.0 and not args.synthetic:
         out = args.specs_dir / f"{name}.yaml"
