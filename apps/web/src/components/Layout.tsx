@@ -149,8 +149,7 @@ function BrandMark() {
 
       {flash && (
         <Flash onDismiss={hide}>
-          <img className="brand-flash-logo" src="/logo.png" alt="Bulls and Bears" />
-          <span className="dev-flash-handle">The agentic trading toolkit</span>
+          <img className="brand-flash-logo" src="/logo.png" alt="Bulls and Bears — the agentic trading toolkit" />
         </Flash>
       )}
     </>

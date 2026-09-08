@@ -43,7 +43,9 @@ describe('the header', () => {
     expect(logo()).toBeNull()
     act(() => mark().click())
     expect(logo()).not.toBeNull()
-    expect(document.body.textContent).toContain('The agentic trading toolkit')
+    // The tagline lives in the logo art itself, so it must not be repeated as text.
+    expect(document.body.textContent).not.toContain('The agentic trading toolkit')
+    expect(logo()?.getAttribute('alt')).toContain('the agentic trading toolkit')
   })
 
   it('clears the logo when the overlay is tapped', () => {
