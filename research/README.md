@@ -10,10 +10,11 @@ runs unattended.
 tt/data/        bars.py (the §4.1 Parquet schema), yahoo.py, checks.py, synthetic.py
 tt/stats/       adf, engle_granger, johansen, halflife_ar1, kelly
 tt/backtest/    engine.py, metrics.py, walkforward.py
-tt/strategies/  pairs.py — pairs_zscore; ratio.py — ratio_reversion (both per docs/CONTRACTS.md)
+tt/strategies/  pairs.py, ratio.py, trend.py, momentum.py — one strategy each, per docs/CONTRACTS.md
+tt/study.py     what every study script shares: flags, data, windows, the verdict
 tt/spec.py      writes specs (validated against specs/strategy.schema.json) and goldens
-scripts/        gld_gdx.py, the study that produces the first spec
-                etf_gld_ratio.py, the ETF/GLD ratio study (docs/strategies/etf_gld_ratio.md)
+scripts/        gld_gdx.py (pairs), etf_gld_ratio.py, sma_trend.py, dual_momentum.py — one
+                study each; docs/strategies/ has the write-up of each
 ```
 
 ## Running it
@@ -30,10 +31,12 @@ uv run python scripts/etf_gld_ratio.py         # SPY, QQQ, VTI, XLK against GLD,
 uv run python scripts/etf_gld_ratio.py --csv-dir DIR   # from Kaggle-format SYMBOL.csv files
 ```
 
-Both scripts take `--specs-dir`, `--bars-dir` and `--out-dir` to put a
-promoted spec, the fetched bars and a rejected spec somewhere other than the
-checkout; the app's Research tab uses these to run a study on the trading
-machine with the output pointed at the runtime's own directories.
+Every script takes `--universe SPY,QQQ,GLD` (the haven last; a pairs study
+takes exactly two), `--train-to`, and `--specs-dir`, `--bars-dir` and
+`--out-dir` to put a promoted spec, the fetched bars and a rejected spec
+somewhere other than the checkout; the app's Research tab uses these to run
+a study on the trading machine with the output pointed at the runtime's own
+directories. A study refuses a test window under 252 bars.
 
 Each script promotes its spec (`specs/gld_gdx_pairs.yaml`, `specs/etf_gld_ratio.yaml`) only when the out-of-sample
 Sharpe clears 1.0 on real data; otherwise the spec goes to `research/out/` as

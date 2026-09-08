@@ -1,0 +1,30 @@
+name: sma_trend
+version: 1
+strategy: sma_trend
+universe:
+- SPY
+- QQQ
+- VTI
+- XLK
+- GLD
+params:
+  lookback: 200.0
+  band: 0.02
+sizing:
+  gross_leverage: 1.0
+  max_notional_per_leg_usd: 2000.0
+provenance:
+  train_window:
+    from: '2005-02-25'
+    to: '2013-12-31'
+  test_window:
+    from: '2014-01-01'
+    to: '2017-11-10'
+  oos_sharpe: 1.1147678947321435
+  oos_max_drawdown: -0.14678714370287593
+  cost_model:
+    commission_usd: 0.0
+    slippage_bps: 5.0
+  research_git_sha: '2338185'
+  generated_at: '2026-09-08T01:11:31Z'
+  ttl_days: 90

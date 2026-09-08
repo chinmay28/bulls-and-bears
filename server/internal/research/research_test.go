@@ -71,12 +71,17 @@ func wait(t *testing.T, r *Runner, id string) View {
 }
 
 func TestStudiesAreKnown(t *testing.T) {
-	if len(Studies()) < 2 {
+	if len(Studies()) < 4 {
 		t.Fatalf("studies = %v", Studies())
 	}
 	s, ok := Find("etf_gld_ratio")
-	if !ok || s.Script != "scripts/etf_gld_ratio.py" || s.DefaultTrainTo == "" {
+	if !ok || s.Script != "scripts/etf_gld_ratio.py" || s.DefaultTrainTo == "" || len(s.DefaultUniverse) != 5 {
 		t.Errorf("etf_gld_ratio = %+v, %v", s, ok)
+	}
+	for _, st := range Studies() {
+		if err := checkUniverse(st, st.DefaultUniverse); err != nil {
+			t.Errorf("%s's own universe is refused: %v", st.Name, err)
+		}
 	}
 	if _, ok := Find("momentum"); ok {
 		t.Error("found a study that does not exist")
@@ -113,7 +118,7 @@ func TestEnvBeforeAndAfterSetup(t *testing.T) {
 
 func TestRunSyncsThenRunsTheStudyWithTheRuntimesDirectories(t *testing.T) {
 	r := newRunner(t, true)
-	v, err := r.Start(Run, "etf_gld_ratio", Options{TrainTo: "2019-12-31"})
+	v, err := r.Start(Run, "etf_gld_ratio", Options{TrainTo: "2019-12-31", Universe: []string{"SPY", "IAU"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,6 +140,7 @@ func TestRunSyncsThenRunsTheStudyWithTheRuntimesDirectories(t *testing.T) {
 		"--out-dir " + filepath.Join(root, "out"),
 		"--golden " + filepath.Join(root, "golden", "etf_gld_ratio"),
 		"--train-to 2019-12-31",
+		"--universe SPY,IAU",
 		"cache=" + filepath.Join(root, "cache"),
 	} {
 		if !strings.Contains(text, want) {
@@ -192,6 +198,10 @@ func TestStartRefusesWhatItCanJudgeUpFront(t *testing.T) {
 		{"bad date", Run, "etf_gld_ratio", Options{TrainTo: "yesterday"}, "not a YYYY-MM-DD date"},
 		{"date for a study without one", Run, "gld_gdx_pairs", Options{TrainTo: "2019-12-31"}, "takes no train-to"},
 		{"train-to too recent", Run, "etf_gld_ratio", Options{TrainTo: time.Now().AddDate(0, -6, 0).Format("2006-01-02")}, "less than a year out of sample"},
+		{"one symbol", Run, "sma_trend", Options{Universe: []string{"SPY"}}, "at least two symbols"},
+		{"not a symbol", Run, "sma_trend", Options{Universe: []string{"spy", "GLD"}}, "not a symbol"},
+		{"repeated symbol", Run, "sma_trend", Options{Universe: []string{"SPY", "SPY", "GLD"}}, "repeats SPY"},
+		{"pairs needs exactly two", Run, "gld_gdx_pairs", Options{Universe: []string{"GLD", "GDX", "SLV"}}, "exactly 2 symbols"},
 		{"unknown kind", Kind("dance"), "", Options{}, "unknown job kind"},
 	}
 	for _, tc := range cases {

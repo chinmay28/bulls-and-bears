@@ -2,6 +2,7 @@
 
     uv run python scripts/etf_gld_ratio.py                 # fetch from Yahoo
     uv run python scripts/etf_gld_ratio.py --csv-dir DIR   # Kaggle-format CSVs, no network
+    uv run python scripts/etf_gld_ratio.py --universe SPY,IAU   # another universe, another haven
 
 The idea under test (docs/strategies/etf_gld_ratio.md): hold a broad equity
 ETF while its price ratio to GLD is stretched below the ratio's own trailing
@@ -17,7 +18,6 @@ either way: parity does not care whether the strategy is any good.
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import itertools
 import sys
@@ -28,20 +28,15 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from tt import study
 from tt.backtest import metrics
-from tt.backtest.engine import CostModel, Result, run
-from tt.data import bars as barsio
-from tt.data.checks import check
-from tt.data.yahoo import fetch
-from tt.spec import REPO_ROOT, build_spec, write_golden, write_spec
+from tt.backtest.engine import Result
 from tt.stats.kelly import half_kelly
 from tt.strategies import ratio
 
-NAME = "etf_gld_ratio"
-UNIVERSE = ["SPY", "QQQ", "VTI", "XLK", "GLD"]
+BASE = "etf_gld_ratio"
+DEFAULT_UNIVERSE = ["SPY", "QQQ", "VTI", "XLK", "GLD"]
 START = dt.date(2005, 1, 1)  # GLD listed 2004-11; VTI, XLK, QQQ, SPY are older
-COSTS = CostModel(commission_usd=0.0, slippage_bps=5.0)
-MAX_LEG_USD = 2000.0
 NO_TIME_STOP = 9999
 
 # The grid is fixed before the data is looked at. Lookbacks span a fortnight
@@ -53,87 +48,16 @@ EXITS = [-0.5, 0.0, 0.5, 1.0]
 # One to two trades a week: each sleeve switch is a sell and a buy, so 40..120
 # switches a year across the four sleeves is 80..240 orders, 1.5..4.5 a week.
 BAND = (40.0, 120.0)
-# The test window has to be long enough for its Sharpe to mean something. A
-# year of daily returns is the least the runtime's floor should be cleared
-# on; four days of them annualize to any number at all.
-MIN_TEST_BARS = 252
 
 
 @dataclass(frozen=True)
 class Trial:
-    """One configuration's showing on a window."""
+    """One configuration's showing on the training window."""
 
     params: ratio.Params
     sharpe: float
-    cagr: float
-    max_drawdown: float
     switches_per_year: float
     result: Result
-
-
-def _slice(df: pd.DataFrame, lo: dt.date, hi: dt.date) -> pd.DataFrame:
-    d = pd.to_datetime(df["date"]).dt.date
-    return df[(d >= lo) & (d <= hi)].reset_index(drop=True)
-
-
-def load_csv_dir(directory: Path, fetched_at: pd.Timestamp) -> dict[str, pd.DataFrame]:
-    """Read ``SYMBOL.csv`` files in the Kaggle "Huge Stock Market Dataset" shape.
-
-    Columns ``Date,Open,High,Low,Close,Volume[,OpenInt]``; the prices there are
-    already adjusted for splits and dividends, so ``adjclose`` is ``Close``.
-    """
-    out: dict[str, pd.DataFrame] = {}
-    for s in UNIVERSE:
-        raw = pd.read_csv(directory / f"{s}.csv", parse_dates=["Date"])
-        df = pd.DataFrame(
-            {
-                "date": raw["Date"].dt.date,
-                "open": raw["Open"].astype(float),
-                "high": raw["High"].astype(float),
-                "low": raw["Low"].astype(float),
-                "close": raw["Close"].astype(float),
-                "adjclose": raw["Close"].astype(float),
-                "volume": raw["Volume"].fillna(0).astype("int64"),
-                "source": "kaggle",
-                "fetched_at": fetched_at,
-            }
-        )
-        df = barsio.normalize(df)
-        check(df)
-        out[s] = df
-    return out
-
-
-def backtest(
-    bars: dict[str, pd.DataFrame], params: ratio.Params, gross: float, start: dt.date
-) -> Trial:
-    """Replay over everything given, open the book at ``start``."""
-    tr = ratio.replay(bars, UNIVERSE, params, gross)
-    al = ratio.align(bars, UNIVERSE)
-    keep = (pd.to_datetime(al["date"]).dt.date >= start).to_numpy()
-    prices = al[keep].reset_index(drop=True)
-    weights = ratio.weights_frame(tr, UNIVERSE)[keep].reset_index(drop=True)
-    res = run(prices, weights, COSTS)
-    eq = res.equity["equity"].to_numpy()
-    years = len(eq) / metrics.TRADING_DAYS
-    return Trial(
-        params=params,
-        sharpe=metrics.sharpe(metrics.daily_returns(eq)),
-        cagr=float((eq[-1] / eq[0]) ** (1 / years) - 1) if years > 0 else float("nan"),
-        max_drawdown=metrics.max_drawdown(eq),
-        switches_per_year=ratio.switches(tr[keep].reset_index(drop=True), UNIVERSE) / years,
-        result=res,
-    )
-
-
-def hold(bars: dict[str, pd.DataFrame], symbol: str, start: dt.date) -> tuple[float, float]:
-    """Buy-and-hold one symbol through the same engine: Sharpe and max drawdown."""
-    al = ratio.align(bars, UNIVERSE)
-    keep = (pd.to_datetime(al["date"]).dt.date >= start).to_numpy()
-    prices = al[keep].reset_index(drop=True)
-    w = pd.DataFrame({s: [1.0 if s == symbol else 0.0] * len(prices) for s in UNIVERSE})
-    eq = run(prices, w, COSTS).equity["equity"].to_numpy()
-    return metrics.sharpe(metrics.daily_returns(eq)), metrics.max_drawdown(eq)
 
 
 def grid() -> list[ratio.Params]:
@@ -156,61 +80,35 @@ def choose(trials: list[Trial]) -> tuple[Trial, str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--csv-dir", type=Path, help="Kaggle-format SYMBOL.csv files instead of Yahoo")
-    ap.add_argument("--train-to", type=dt.date.fromisoformat, default=dt.date(2013, 12, 31),
-                    help="last day of the training window (default 2013-12-31)")
-    ap.add_argument("--golden", default=str(REPO_ROOT / "golden" / NAME))
-    # Where the outputs go. The defaults are the checkout's; the app points
-    # them at the runtime's own directories when it runs this.
-    ap.add_argument("--specs-dir", type=Path, default=REPO_ROOT / "specs",
-                    help="where a promoted spec is written")
-    ap.add_argument("--bars-dir", type=Path, default=REPO_ROOT / "research" / "data" / "bars",
-                    help="where the fetched bars are written as Parquet")
-    ap.add_argument("--out-dir", type=Path, default=REPO_ROOT / "research" / "out",
-                    help="where a rejected spec is written")
-    args = ap.parse_args()
-
-    data_dir = args.bars_dir
-    if args.csv_dir:
-        bars = load_csv_dir(args.csv_dir, pd.Timestamp.now(tz="UTC"))
-        source_note = f"Kaggle 'Huge Stock Market Dataset' CSVs from {args.csv_dir.name}/ (adjusted; ends 2017-11)"
-        real = False
-    else:
-        bars = fetch(UNIVERSE, START)
-        source_note = "Yahoo Finance via yfinance"
-        real = True
-    for s, df in bars.items():
-        barsio.write_bars(df, data_dir / f"{s}.parquet")
-    aligned = ratio.align(bars, UNIVERSE)
-    first = pd.Timestamp(aligned["date"].iloc[0]).date()
-    last = pd.Timestamp(aligned["date"].iloc[-1]).date()
-    train = (first, args.train_to)
-    test = (args.train_to + dt.timedelta(days=1), last)
-    if not first < train[1] < last:
-        print(f"train_to {train[1]} must fall inside the data {first}..{last}", file=sys.stderr)
+    args = study.parse_args(__doc__ or "", default_universe=DEFAULT_UNIVERSE,
+                            default_train_to=dt.date(2013, 12, 31))
+    universe: list[str] = args.universe
+    name = study.spec_name(BASE, universe, DEFAULT_UNIVERSE)
+    data = study.load(args, universe, START)
+    aligned = ratio.align(data.bars, universe)
+    win = study.windows(aligned["date"], args.train_to)
+    if win is None:
         return 2
-    test_bars = int((pd.to_datetime(aligned["date"]).dt.date >= test[0]).sum())
-    if test_bars < MIN_TEST_BARS:
-        print(f"REFUSED: the test window {test[0]}..{test[1]} holds {test_bars} bars; at least "
-              f"{MIN_TEST_BARS} (about a year) are needed before an out-of-sample Sharpe means "
-              f"anything. Move --train-to earlier.", file=sys.stderr)
-        return 2
-    print(f"data: {source_note}; {len(aligned)} aligned bars {first}..{last}")
-    print(f"train {train[0]}..{train[1]}, test {test[0]}..{test[1]}, costs {COSTS}")
+    print(f"{name}: {data.source_note}; {len(aligned)} aligned bars; "
+          f"train {win.train[0]}..{win.train[1]}, test {win.test[0]}..{win.test[1]}, costs {study.COSTS}")
 
     # Train: the fixed grid, judged on the training window alone.
-    train_bars = {s: _slice(df, *train) for s, df in bars.items()}
-    trials = [backtest(train_bars, p, 1.0, train[0]) for p in grid()]
+    train_bars = {s: study.slice_window(df, *win.train) for s, df in data.bars.items()}
+    train_prices = ratio.align(train_bars, universe)
+    years = len(train_prices) / metrics.TRADING_DAYS
+    trials = []
+    for p in grid():
+        tr = ratio.replay(train_bars, universe, p, 1.0)
+        res = study.backtest_weights(train_prices, ratio.weights_frame(tr, universe), win.train[0])
+        trials.append(Trial(p, float(study.summary(res)["sharpe"]), ratio.switches(tr, universe) / years, res))
     best, why = choose(trials)
-    ranked = sorted(trials, key=lambda t: t.sharpe, reverse=True)
     print(f"\ntrain: {len(trials)} configurations; top 8 by Sharpe:")
-    for t in ranked[:8]:
+    for t in sorted(trials, key=lambda t: t.sharpe, reverse=True)[:8]:
         p = t.params
         print(f"  L={p.lookback:3d} entry={p.entry_z:.1f} exit={p.exit_z:+.1f} stop={p.max_hold_days:4d}: "
-              f"Sharpe {t.sharpe:.2f} CAGR {t.cagr:.1%} maxDD {t.max_drawdown:.1%} "
-              f"switches/yr {t.switches_per_year:.0f}")
-    print("train buy-and-hold Sharpe: " + ", ".join(f"{s} {hold(train_bars, s, train[0])[0]:.2f}" for s in UNIVERSE))
+              f"Sharpe {t.sharpe:.2f}, switches/yr {t.switches_per_year:.0f}")
+    print("train buy-and-hold Sharpe: " + ", ".join(
+        f"{s} {study.hold(train_prices, universe, s, win.train[0]):.2f}" for s in universe))
     print(f"share of configurations with train Sharpe >= 1.0: {sum(t.sharpe >= 1 for t in trials) / len(trials):.1%}")
     p = best.params
     print(f"\nchosen ({why}): L={p.lookback} entry={p.entry_z} exit={p.exit_z} max_hold={p.max_hold_days}; "
@@ -220,53 +118,25 @@ def main() -> int:
     # book is long-only and unlevered by construction.
     r = metrics.daily_returns(best.result.equity["equity"].to_numpy())
     var = float(r.var(ddof=1))
-    gross = half_kelly(float(r.mean()), var, cap=1.0) if var > 0 else 1.0
-    gross = max(gross, 0.1)
-    print(f"half-Kelly leverage {gross:.3f} (full Kelly {float(r.mean()) / var if var > 0 else float('nan'):.2f})")
+    gross = max(half_kelly(float(r.mean()), var, cap=1.0) if var > 0 else 1.0, 0.1)
+    print(f"half-Kelly leverage {gross:.3f}")
 
     # Test: replay over the whole history so the sleeves are warm; the book
     # opens on the first test bar. This is the one look at the test window.
-    oos = backtest(bars, p, gross, test[0])
-    print(f"\ntest {test[0]}..{test[1]}: Sharpe {oos.sharpe:.3f}, CAGR {oos.cagr:.1%}, "
-          f"max DD {oos.max_drawdown:.1%}, {oos.switches_per_year:.0f} switches/yr, "
-          f"{len(oos.result.trades)} orders")
-    print("test buy-and-hold Sharpe: " + ", ".join(f"{s} {hold(bars, s, test[0])[0]:.2f}" for s in UNIVERSE))
+    tr = ratio.replay(data.bars, universe, p, gross)
+    oos = study.backtest_weights(aligned, ratio.weights_frame(tr, universe), win.test[0])
+    keep = (pd.to_datetime(tr["date"]).dt.date >= win.test[0]).to_numpy()
+    print(study.describe("test", oos, {"switches": ratio.switches(tr[keep].reset_index(drop=True), universe)}))
+    print("test buy-and-hold Sharpe: " + ", ".join(
+        f"{s} {study.hold(aligned, universe, s, win.test[0]):.2f}" for s in universe))
 
-    spec = build_spec(
-        name=NAME, strategy=ratio.NAME, universe=UNIVERSE,
+    return study.emit(
+        args=args, name=name, strategy=ratio.NAME, universe=universe,
         params={"lookback": p.lookback, "entry_z": p.entry_z, "exit_z": p.exit_z,
                 "max_hold_days": p.max_hold_days},
-        gross_leverage=gross, max_notional_per_leg_usd=MAX_LEG_USD,
-        train_window=train, test_window=test,
-        oos_sharpe=float(oos.sharpe), oos_max_drawdown=float(oos.max_drawdown),
-        commission_usd=COSTS.commission_usd, slippage_bps=COSTS.slippage_bps,
+        gross=gross, win=win, oos=oos,
+        signals=ratio.signals(data.bars, universe, p, gross), data=data, script="etf_gld_ratio.py",
     )
-    if oos.sharpe >= 1.0 and real:
-        out = args.specs_dir / f"{NAME}.yaml"
-        write_spec(spec, out)
-        print(f"PROMOTED: wrote {out}")
-    else:
-        out = args.out_dir / f"{NAME}.rejected.yaml"
-        write_spec(spec, out)
-        why_not = f"OOS Sharpe {oos.sharpe:.2f} < 1.0" if oos.sharpe < 1.0 else "not Yahoo data"
-        print(f"NOT PROMOTED ({why_not}): wrote {out}")
-
-    # Goldens: every aligned date's signals over the whole history; the equity
-    # curve from the test window on.
-    sig = ratio.signals(bars, UNIVERSE, p, gross)
-    m = metrics.summary(oos.result.equity["equity"].to_numpy())
-    note = (
-        f"# golden/{NAME}\n\nParity fixtures for `{ratio.NAME}` (docs/PLAN.md §4.3, §4.4).\n\n"
-        f"Source: {source_note}.\nWritten by research/scripts/{NAME}.py on "
-        f"{dt.datetime.now(dt.UTC):%Y-%m-%d}.\n\n"
-        "Regenerate with `make golden-ratio` and commit the result together with any\n"
-        "change to docs/CONTRACTS.md or either implementation.\n"
-    )
-    files = write_golden(Path(args.golden), bars=bars, spec=spec, signals=sig,
-                         equity=oos.result.equity, metrics=m, note=note)
-    for f in files:
-        print("wrote", f)
-    return 0
 
 
 if __name__ == "__main__":

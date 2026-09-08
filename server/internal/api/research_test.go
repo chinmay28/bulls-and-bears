@@ -120,6 +120,7 @@ func TestResearchRunValidation(t *testing.T) {
 		{`{"study":"momentum"}`, http.StatusBadRequest},
 		{`{"study":"etf_gld_ratio","trainTo":"soon"}`, http.StatusBadRequest},
 		{`{"study":"etf_gld_ratio","typo":1}`, http.StatusBadRequest},
+		{`{"study":"etf_gld_ratio","universe":["SPY"]}`, http.StatusBadRequest},
 	}
 	for _, tc := range cases {
 		if w := do(t, h, "POST", "/api/research/runs", tc.body); w.Code != tc.want {

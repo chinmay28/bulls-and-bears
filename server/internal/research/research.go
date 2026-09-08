@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -43,24 +44,61 @@ type Study struct {
 	// TrainTo says the script takes --train-to, and what the app offers by
 	// default. Empty when the study has no such option.
 	DefaultTrainTo string `json:"defaultTrainTo,omitempty"`
+	// DefaultUniverse is the symbols the script studies unless told
+	// otherwise, the haven last; UniverseSize is how many it needs, 0 for
+	// any number of two or more.
+	DefaultUniverse []string `json:"defaultUniverse"`
+	UniverseSize    int      `json:"universeSize,omitempty"`
+	// UniverseHint says what the symbols mean, for the field's help text.
+	UniverseHint string `json:"universeHint"`
 }
+
+// haven is the last symbol of the studies that rest in one.
+const havenHint = "Risk assets first, the haven last: each sleeve holds its asset or the haven."
 
 var studies = []Study{
 	{
 		Name:  "etf_gld_ratio",
 		Title: "ETF/GLD ratio reversion",
-		Description: "SPY, QQQ, VTI and XLK against GLD: hold an ETF while its price ratio to gold is " +
-			"stretched below its own trailing mean, hold GLD otherwise. Sweeps on the training window, " +
-			"judges once on the year or more after it, and promotes the spec only if the Sharpe clears 1.0.",
-		Script:         "scripts/etf_gld_ratio.py",
-		DefaultTrainTo: "2019-12-31",
+		Description: "Hold an ETF while its price ratio to the haven is stretched below its own trailing " +
+			"mean, hold the haven otherwise. Sweeps on the training window, judges once on the year or " +
+			"more after it, and promotes the spec only if the Sharpe clears 1.0.",
+		Script:          "scripts/etf_gld_ratio.py",
+		DefaultTrainTo:  "2019-12-31",
+		DefaultUniverse: []string{"SPY", "QQQ", "VTI", "XLK", "GLD"},
+		UniverseHint:    havenHint,
+	},
+	{
+		Name:  "sma_trend",
+		Title: "Moving-average trend",
+		Description: "Faber's timing rule: hold an ETF while it trades above its own trailing average, " +
+			"the haven otherwise. Trades a few times a year per sleeve. The lookback and the band " +
+			"around the average are chosen on the training window.",
+		Script:          "scripts/sma_trend.py",
+		DefaultTrainTo:  "2019-12-31",
+		DefaultUniverse: []string{"SPY", "QQQ", "VTI", "XLK", "GLD"},
+		UniverseHint:    havenHint,
+	},
+	{
+		Name:  "dual_momentum",
+		Title: "Dual momentum",
+		Description: "Antonacci's rotation: every few weeks rank the ETFs by trailing return, hold the " +
+			"best that beat the haven's own return, rest in the haven. Lookback, how many to hold and " +
+			"the rebalance interval are chosen on the training window.",
+		Script:          "scripts/dual_momentum.py",
+		DefaultTrainTo:  "2019-12-31",
+		DefaultUniverse: []string{"SPY", "QQQ", "VTI", "XLK", "GLD"},
+		UniverseHint:    havenHint,
 	},
 	{
 		Name:  "gld_gdx_pairs",
-		Title: "GLD/GDX pairs",
-		Description: "Chan's gold against gold miners: the cointegrating hedge ratio from the training " +
-			"window, then a z-score band on the spread.",
-		Script: "scripts/gld_gdx.py",
+		Title: "Pairs (GLD/GDX)",
+		Description: "Chan's pairs trade: the cointegrating hedge ratio from the training window, then a " +
+			"z-score band on the spread. Any two symbols; gold against gold miners by default.",
+		Script:          "scripts/gld_gdx.py",
+		DefaultUniverse: []string{"GLD", "GDX"},
+		UniverseSize:    2,
+		UniverseHint:    "Exactly two symbols: the spread is the first less the hedge ratio times the second.",
 	},
 }
 
@@ -105,6 +143,34 @@ type Options struct {
 	// TrainTo is the last day of the training window, YYYY-MM-DD; empty
 	// takes the script's default.
 	TrainTo string `json:"trainTo,omitempty"`
+	// Universe is the symbols to study, the haven last; empty takes the
+	// study's own.
+	Universe []string `json:"universe,omitempty"`
+}
+
+// symbolRE is the schema's symbol shape.
+var symbolRE = regexp.MustCompile(`^[A-Z][A-Z0-9.]{0,9}$`)
+
+// checkUniverse judges a universe the way the scripts and the spec schema
+// will, so the refusal comes before a fetch is paid for.
+func checkUniverse(study Study, universe []string) error {
+	if len(universe) < 2 {
+		return fmt.Errorf("research: a universe needs at least two symbols, got %v", universe)
+	}
+	if study.UniverseSize > 0 && len(universe) != study.UniverseSize {
+		return fmt.Errorf("research: %s takes exactly %d symbols, got %d", study.Name, study.UniverseSize, len(universe))
+	}
+	seen := map[string]bool{}
+	for _, s := range universe {
+		if !symbolRE.MatchString(s) {
+			return fmt.Errorf("research: %q is not a symbol", s)
+		}
+		if seen[s] {
+			return fmt.Errorf("research: universe repeats %s", s)
+		}
+		seen[s] = true
+	}
+	return nil
 }
 
 // Step is one command of a job.
@@ -262,6 +328,11 @@ func (r *Runner) Start(kind Kind, studyName string, opts Options) (View, error) 
 			if latest := time.Now().UTC().AddDate(0, 0, -MinTestDays); trainTo.After(latest) {
 				return View{}, fmt.Errorf("research: train-to %s leaves less than a year out of sample; "+
 					"it must be %s or earlier", opts.TrainTo, latest.Format("2006-01-02"))
+			}
+		}
+		if len(opts.Universe) > 0 {
+			if err := checkUniverse(study, opts.Universe); err != nil {
+				return View{}, err
 			}
 		}
 	default:
@@ -459,6 +530,9 @@ func (r *Runner) steps(ctx context.Context, j *job, study Study) error {
 	}
 	if j.view.Options.TrainTo != "" {
 		args = append(args, "--train-to", j.view.Options.TrainTo)
+	}
+	if len(j.view.Options.Universe) > 0 {
+		args = append(args, "--universe", strings.Join(j.view.Options.Universe, ","))
 	}
 	err := j.step(ctx, "study", uv+" "+strings.Join(args, " "), func(ctx context.Context) error {
 		return j.exec(ctx, r.Dir, env, uv, args...)

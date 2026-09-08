@@ -228,6 +228,11 @@ export interface Study {
   script: string
   /** Set when the study takes a training-window end date. */
   defaultTrainTo?: string
+  /** The symbols the study runs on unless told otherwise, the haven last. */
+  defaultUniverse: string[]
+  /** How many symbols the study needs; absent for any number of two or more. */
+  universeSize?: number
+  universeHint: string
 }
 
 export type JobStatus = 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'
@@ -244,7 +249,7 @@ export interface ResearchJob {
   id: string
   kind: 'setup' | 'run' | ''
   study?: string
-  options: { trainTo?: string }
+  options: { trainTo?: string; universe?: string[] }
   status: JobStatus
   started: string
   ended?: string

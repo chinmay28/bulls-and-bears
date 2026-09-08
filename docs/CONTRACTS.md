@@ -134,3 +134,53 @@ these as written, left to right, so the rounding agrees.
 Golden `expected_signals.csv` columns are the same as for `pairs_zscore`:
 `date`, `symbol`, `target_weight`, one row per symbol per aligned date,
 including the haven. Tolerance for Go against Python: `1e-9` absolute.
+
+## `sma_trend`
+
+Universe is `[R_1 … R_k, H]` in spec order, k ≥ 1, no symbol twice: the risk
+assets and, last, the haven. Params: `lookback` (L, integer ≥ 2), `band`
+(b, 0 ≤ b < 1). Sizing: `gross_leverage` (G). Alignment is the inner join
+of every symbol on date; all prices are `adjclose`.
+
+For each risk asset i, with `C_i,t = Σ_{u≤t} adjclose_i,u` the cumulative
+sum accumulated in date order from the first aligned bar (`C_i,−1 = 0`):
+
+- `sma_i,t = (C_i,t − C_i,t−L) / L`, undefined while fewer than L bars exist.
+
+Both sides compute the average from that running sum, in that order, so
+they agree bit for bit: a price exactly on its average reads the same in
+both languages.
+
+Each risk asset has a sleeve with state `s_i ∈ {0, 1}`, replayed from the
+first aligned bar. Per bar:
+
+- `s_i = 1`: exit to 0 if `adjclose_i,t < sma_i,t · (1 − b)`.
+- `s_i = 0`: enter 1 if `adjclose_i,t > sma_i,t · (1 + b)`.
+- Undefined `sma_i,t` forces `s_i = 0`.
+
+Both comparisons are strict: a price on the average, or inside the band,
+leaves the sleeve where it is.
+
+Weights, with `flat` the number of sleeves in state 0: `w_i = G / k` if
+`s_i = 1`, else 0; `w_H = G · flat / k`. Golden columns and tolerance as for
+`ratio_reversion`.
+
+## `dual_momentum`
+
+Universe is `[R_1 … R_k, H]` in spec order, k ≥ 1, no symbol twice.
+Params: `lookback` (L, integer ≥ 1), `top_k` (integer, 1 ≤ top_k ≤ k),
+`rebalance_days` (R, integer ≥ 1). Sizing: `gross_leverage` (G). Alignment
+is the inner join of every symbol on date; all prices are `adjclose`.
+Aligned bars are indexed `t = 0, 1, …` from the first.
+
+- For every symbol x and `t ≥ L`: `r_x,t = adjclose_x,t / adjclose_x,t−L − 1`.
+  Undefined for `t < L`.
+- Bar t is a **rebalance bar** when `t ≥ L` and `(t − L) mod R = 0`.
+- On a rebalance bar the held set becomes: the risk assets with
+  `r_i,t > r_H,t`, ordered by `r_i,t` descending with ties in universe order
+  (a stable sort), truncated to the first `top_k`. On any other bar the held
+  set is unchanged. Before the first rebalance bar nothing is held.
+
+Weights, with `n` the number held: `w_i = G / top_k` for a held risk asset,
+0 otherwise; `w_H = G · (top_k − n) / top_k`. Golden columns and tolerance
+as for `ratio_reversion`.
