@@ -276,3 +276,25 @@ Aligned bars are indexed `t = 0, 1, …` from the first.
 Weights, with `n` the number held: `w_i = G / top_k` for a held risk asset,
 0 otherwise; `w_H = G · (top_k − n) / top_k`. Golden columns and tolerance
 as for `ratio_reversion`.
+
+## `time_series_momentum`
+
+Universe is `[R_1 … R_k, H]` in spec order, k ≥ 1, no symbol twice: the
+risk assets and, last, the haven. Params: `lookback` (L, integer ≥ 1),
+`rebalance_days` (R, integer ≥ 1). Sizing: `gross_leverage` (G). Alignment
+is the inner join of every symbol on date; all prices are `adjclose`;
+aligned bars are indexed `t = 0, 1, …`.
+
+Each risk asset has a sleeve that asks only about its own trend
+(Moskowitz, Ooi and Pedersen, 2012), never about the others or the haven:
+
+- `r_i,t = adjclose_i,t / adjclose_i,t−L − 1` (Indicators, rolling return),
+  undefined for `t < L`.
+- Bar t is a **rebalance bar** when `t ≥ L` and `(t − L) mod R = 0`.
+- On a rebalance bar `s_i = 1` if `r_i,t > 0`, else 0: a return of exactly
+  zero, or an undefined one, rests in the haven. On any other bar `s_i` is
+  unchanged. Before the first rebalance bar every sleeve is 0.
+
+Weights, with `flat` the number of sleeves in state 0: `w_i = G / k` if
+`s_i = 1`, else 0; `w_H = G · flat / k`. Golden columns and tolerance as for
+`ratio_reversion`. Researched and backtested under `fill_at: next_open`.

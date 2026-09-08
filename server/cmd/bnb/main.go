@@ -50,6 +50,7 @@ import (
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/pairs"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/ratio"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/trend"
+	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/tsmomentum"
 	"github.com/chinmay28/bulls-and-bears/server/internal/version"
 	"github.com/chinmay28/bulls-and-bears/server/internal/web"
 )

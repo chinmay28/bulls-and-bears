@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -265,3 +266,118 @@ def describe(label: str, res: Result, extra: dict[str, Any] | None = None) -> st
     for k, v in (extra or {}).items():
         text += f", {k} {v}"
     return text
+
+
+# --- The sweep, its record, and the robustness checks (docs/PLAN.md, research diagnostics) ---
+
+STRESS_BPS = (5.0, 10.0, 20.0)
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One parameter set tried on the training window, with what it did there."""
+
+    params: dict[str, float]
+    result: Result
+    switches: int
+
+    @property
+    def sharpe(self) -> float:
+        """The training Sharpe."""
+        return float(summary(self.result)["sharpe"])
+
+
+def diagnostics(res: Result) -> dict[str, float | int]:
+    """The numbers research reports beyond the runtime's three.
+
+    ``turnover`` is the notional traded per year as a multiple of average
+    equity; ``trades`` counts legs.
+    """
+    eq = res.equity["equity"].to_numpy()
+    m = metrics.summary(eq)
+    years = len(eq) / metrics.TRADING_DAYS
+    cagr = (eq[-1] / eq[0]) ** (1 / years) - 1 if years > 0 and eq[0] > 0 else float("nan")
+    traded = float((res.trades["qty"].abs() * res.trades["price"]).sum()) if len(res.trades) else 0.0
+    turnover = traded / float(eq.mean()) / years if years > 0 else float("nan")
+    return {
+        "sharpe": float(m["sharpe"]), "cagr": float(cagr), "max_drawdown": float(m["max_drawdown"]),
+        "max_drawdown_duration": int(m["max_drawdown_duration"]), "trades": len(res.trades),
+        "turnover": float(turnover), "bars": len(eq),
+    }
+
+
+def choose(candidates: list[Candidate], *, prefer_larger: tuple[str, ...] = ()) -> Candidate:
+    """The training winner: highest Sharpe, then the deterministic tie-breaks.
+
+    Ties go to the smaller drawdown, then the lower turnover, then the larger
+    value of each param in ``prefer_larger`` (a longer lookback), then grid
+    order. A NaN Sharpe (a book that never moved) sorts last.
+    """
+    if not candidates:
+        raise ValueError("no candidates")
+
+    def key(c: Candidate) -> tuple[float, ...]:
+        d = diagnostics(c.result)
+        sharpe = float(d["sharpe"])
+        s = -sharpe if sharpe == sharpe else float("inf")
+        return (s, -float(d["max_drawdown"]), float(d["turnover"]), *(-float(c.params[k]) for k in prefer_larger))
+
+    return sorted(candidates, key=key)[0]
+
+
+def sweep_frame(candidates: list[Candidate], chosen: Candidate) -> pd.DataFrame:
+    """Every candidate's params and training diagnostics, the winner marked."""
+    rows = []
+    for c in candidates:
+        d = diagnostics(c.result)
+        rows.append({**c.params, **{f"train_{k}": v for k, v in d.items()}, "switches": c.switches,
+                     "selected": int(c is chosen)})
+    return pd.DataFrame(rows)
+
+
+def neighbours(candidates: list[Candidate], chosen: Candidate) -> list[dict[str, float]]:
+    """The candidates that differ from the winner in exactly one param."""
+    out = []
+    for c in candidates:
+        if c is chosen:
+            continue
+        differing = [k for k in chosen.params if c.params[k] != chosen.params[k]]
+        if len(differing) == 1:
+            out.append({**c.params, "train_sharpe": c.sharpe})
+    return out
+
+
+def cost_stress(
+    prices: pd.DataFrame, weights: pd.DataFrame, start: dt.date, *, fill: Fill,
+    opens: pd.DataFrame | None = None,
+) -> dict[str, dict[str, float]]:
+    """The out-of-sample numbers at each slippage level in STRESS_BPS."""
+    out = {}
+    for bps in STRESS_BPS:
+        res = backtest_weights(prices, weights, start, fill=fill, opens=opens,
+                               costs=CostModel(commission_usd=COSTS.commission_usd, slippage_bps=bps))
+        d = diagnostics(res)
+        out[f"{bps:g}"] = {"sharpe": float(d["sharpe"]), "cagr": float(d["cagr"]),
+                           "max_drawdown": float(d["max_drawdown"])}
+    return out
+
+
+def record(
+    args: argparse.Namespace, name: str, *, candidates: list[Candidate], chosen: Candidate,
+    oos: Result, stress: dict[str, dict[str, float]], extra: dict[str, Any] | None = None,
+) -> Path:
+    """Write sweep.csv, oos.json and robustness.json under ``out_dir/<name>/<stamp>/``."""
+    stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
+    d = Path(args.out_dir) / name / stamp
+    d.mkdir(parents=True, exist_ok=True)
+    sweep_frame(candidates, chosen).to_csv(d / "sweep.csv", index=False)
+    (d / "oos.json").write_text(json.dumps(diagnostics(oos), indent=2) + "\n")
+    rob = {"slippage_bps": stress, "neighbour_params": neighbours(candidates, chosen),
+           "candidates_tried": len(candidates), **diagnostics(oos), **(extra or {})}
+    (d / "robustness.json").write_text(json.dumps(rob, indent=2) + "\n")
+    return d
+
+
+def print_stress(stress: dict[str, dict[str, float]]) -> None:
+    """One line per slippage level."""
+    print("test at slippage " + ", ".join(f"{k} bp: Sharpe {v['sharpe']:.2f}" for k, v in stress.items()))
