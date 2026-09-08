@@ -298,3 +298,29 @@ Each risk asset has a sleeve that asks only about its own trend
 Weights, with `flat` the number of sleeves in state 0: `w_i = G / k` if
 `s_i = 1`, else 0; `w_H = G · flat / k`. Golden columns and tolerance as for
 `ratio_reversion`. Researched and backtested under `fill_at: next_open`.
+
+## `donchian_breakout`
+
+Universe is `[R_1 … R_k, H]` in spec order, k ≥ 1, no symbol twice.
+Params: `entry_lookback` (E, integer ≥ 2), `exit_lookback` (X, integer ≥ 2,
+X < E). Sizing: `gross_leverage` (G). Alignment is the inner join of every
+symbol on date. The channels read the **adjusted** high and low (Adjusted
+OHLC); the close is `adjclose`.
+
+For each risk asset i and aligned bar t (Indicators, Donchian channels):
+
+- `upper_i,t = max(adjhigh_i,t−E … adjhigh_i,t−1)`, undefined for `t < E`
+- `lower_i,t = min(adjlow_i,t−X … adjlow_i,t−1)`, undefined for `t < X`
+
+The current bar is never in its own channel. Each risk asset has a sleeve
+with state `s_i ∈ {0, 1}`, replayed from the first aligned bar. Per bar the
+exit is evaluated before the entry and the two never happen on the same bar:
+
+- Undefined `upper_i,t` forces `s_i = 0`.
+- `s_i = 1`: exit to 0 if `adjclose_i,t < lower_i,t`.
+- `s_i = 0`: enter 1 if `adjclose_i,t > upper_i,t`.
+
+Both comparisons are strict: a close exactly on a channel leaves the sleeve
+where it is. Weights, with `flat` the number of sleeves in state 0:
+`w_i = G / k` if `s_i = 1`, else 0; `w_H = G · flat / k`. Golden columns and
+tolerance as for `ratio_reversion`. Researched under `fill_at: next_open`.
