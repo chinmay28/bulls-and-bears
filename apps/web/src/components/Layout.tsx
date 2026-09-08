@@ -49,7 +49,7 @@ function Flash({ onDismiss, children }: { onDismiss: () => void; children: React
   )
 }
 
-/** The header the four tabs share. App renders it once, outside the routes, so
+/** The header the tabs share. App renders it once, outside the routes, so
  * moving between tabs leaves the brand lockup and the developer mark exactly
  * where they were. Which tab you are on is the tab bar's job to say; the
  * header's job is to stay put and carry identity only. */
@@ -196,6 +196,10 @@ export function TabBar() {
         <StrategiesIcon />
         Strategies
       </NavLink>
+      <NavLink to="/research">
+        <FlaskIcon />
+        Research
+      </NavLink>
       <NavLink to="/book">
         <BookIcon />
         Book
@@ -231,6 +235,17 @@ function StrategiesIcon() {
     <svg viewBox="0 0 24 24" {...stroke}>
       <path d="M3 17l5-6 4 4 4-7 5 5" />
       <path d="M3 21h18" />
+    </svg>
+  )
+}
+
+/** A flask: the studies that earn a spec. */
+function FlaskIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...stroke}>
+      <path d="M9 3h6" />
+      <path d="M10 3v6.5L4.8 18.6A2 2 0 0 0 6.5 21.5h11a2 2 0 0 0 1.7-2.9L14 9.5V3" />
+      <path d="M7.5 15.5h9" />
     </svg>
   )
 }

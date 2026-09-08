@@ -11,6 +11,7 @@ import (
 
 	"github.com/chinmay28/bulls-and-bears/server/internal/bars/refill"
 	"github.com/chinmay28/bulls-and-bears/server/internal/broker/paper"
+	"github.com/chinmay28/bulls-and-bears/server/internal/research"
 	"github.com/chinmay28/bulls-and-bears/server/internal/risk"
 	"github.com/chinmay28/bulls-and-bears/server/internal/runner"
 )
@@ -32,6 +33,9 @@ type Server struct {
 	// Fetcher is where a bars refill gets its history; nil when the server
 	// runs without one, and the refresh endpoint then says so.
 	Fetcher refill.Fetcher
+	// Research runs the Python studies from the app; nil when the server
+	// has no research tree, and the Research tab then says so.
+	Research *research.Runner
 	// RunNow performs a cycle for a run id; nil when there is no runner.
 	RunNow func(ctx context.Context, runID string) (runner.Outcome, error)
 	// RunOffset is how long before the close the scheduler fires.
@@ -66,6 +70,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/bars/refresh", s.handleRefreshBars)
 
 	mux.HandleFunc("GET /api/book", s.handleBook)
+
+	mux.HandleFunc("GET /api/research", s.handleResearch)
+	mux.HandleFunc("POST /api/research/setup", s.handleResearchSetup)
+	mux.HandleFunc("POST /api/research/runs", s.handleResearchRun)
+	mux.HandleFunc("GET /api/research/jobs/{id}", s.handleResearchJob)
+	mux.HandleFunc("DELETE /api/research/jobs/{id}", s.handleResearchCancel)
 
 	mux.HandleFunc("GET /api/runs", s.handleListRuns)
 	mux.HandleFunc("GET /api/runs/{id}", s.handleGetRun)

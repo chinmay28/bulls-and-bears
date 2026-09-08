@@ -6,14 +6,15 @@ import { Banner } from './components/ui'
 import Book from './pages/Book'
 import NotFound from './pages/NotFound'
 import Overview from './pages/Overview'
+import Research from './pages/Research'
 import RunDetail from './pages/RunDetail'
 import Settings from './pages/Settings'
 import Strategies from './pages/Strategies'
 import StrategyDetail from './pages/StrategyDetail'
 
-/** The four tab roots. The header is rendered outside the routes so moving
+/** The five tab roots. The header is rendered outside the routes so moving
  * between tabs leaves it untouched; pushed screens bring their own. */
-const TABS = new Set(['/', '/strategies', '/book', '/settings'])
+const TABS = new Set(['/', '/strategies', '/research', '/book', '/settings'])
 
 export default function App() {
   const { pathname } = useLocation()
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/" element={<Overview />} />
         <Route path="/strategies" element={<Strategies />} />
         <Route path="/strategies/:name" element={<StrategyDetail />} />
+        <Route path="/research" element={<Research />} />
         <Route path="/book" element={<Book />} />
         <Route path="/runs/:id" element={<RunDetail />} />
         <Route path="/settings" element={<Settings />} />

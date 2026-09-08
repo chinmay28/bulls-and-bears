@@ -48,9 +48,17 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--synthetic", action="store_true", help="use the seeded pair, no network")
     ap.add_argument("--golden", default=str(REPO_ROOT / "golden" / "gld_gdx"))
+    # Where the outputs go. The defaults are the checkout's; the app points
+    # them at the runtime's own directories when it runs this.
+    ap.add_argument("--specs-dir", type=Path, default=REPO_ROOT / "specs",
+                    help="where a promoted spec is written")
+    ap.add_argument("--bars-dir", type=Path, default=REPO_ROOT / "research" / "data" / "bars",
+                    help="where the fetched bars are written as Parquet")
+    ap.add_argument("--out-dir", type=Path, default=REPO_ROOT / "research" / "out",
+                    help="where a rejected spec is written")
     args = ap.parse_args()
 
-    data_dir = REPO_ROOT / "research" / "data" / "bars"
+    data_dir = args.bars_dir
     if args.synthetic:
         syn = cointegrated_pair(n=2200, seed=7, hedge=1.6)
         bars = {"GLD": syn["A"], "GDX": syn["B"]}
@@ -102,11 +110,11 @@ def main() -> int:
         commission_usd=COSTS.commission_usd, slippage_bps=COSTS.slippage_bps,
     )
     if m["sharpe"] >= 1.0 and not args.synthetic:
-        out = REPO_ROOT / "specs" / f"{NAME}.yaml"
+        out = args.specs_dir / f"{NAME}.yaml"
         write_spec(spec, out)
         print(f"PROMOTED: wrote {out}")
     else:
-        out = REPO_ROOT / "research" / "out" / f"{NAME}.rejected.yaml"
+        out = args.out_dir / f"{NAME}.rejected.yaml"
         write_spec(spec, out)
         why = "synthetic data" if args.synthetic else f"OOS Sharpe {m['sharpe']:.2f} < 1.0"
         print(f"NOT PROMOTED ({why}): wrote {out}")

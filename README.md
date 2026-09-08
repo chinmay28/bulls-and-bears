@@ -104,7 +104,7 @@ machine that built this tree could not reach Yahoo. Run
 
 ## The phone
 
-Four tabs, in HostMan's shape:
+Five tabs, in HostMan's shape:
 
 - **Overview** — equity, today's change, and the three guardrails as meters
   against their limits; today's run and the next; every spec, armed or
@@ -115,6 +115,13 @@ Four tabs, in HostMan's shape:
   number matches the spec's. **Import a spec** takes the YAML research wrote
   and installs it, if the runtime would run it; a spec's own screen removes
   it again.
+- **Research** — the studies under `research/scripts`, run on the machine
+  from the phone. **Set up the environment** finds or downloads `uv` and
+  installs the Python side into the data directory; **Run study** fetches
+  from Yahoo, sweeps on the training window, judges once out of sample and
+  installs the spec only if it clears the floor — the same gate the script
+  applies from a terminal. The log streams to the phone as it runs; a job
+  can be cancelled; every log is kept.
 - **Book** — equity over time, positions marked to market, working orders,
   fills with the price they got.
 - **Settings** — version, the halt state, the bars per symbol and whether
@@ -145,6 +152,7 @@ Server flags:
 | `-addr` | `BNB_ADDR` | `:8877` | listen address |
 | `-data` | `BNB_DATA` | `data` | halt marker, journal, paper book, token |
 | `-specs` | `BNB_SPECS` | `specs` | strategy specs |
+| `-research` | `BNB_RESEARCH` | `research/` beside `-specs` | the research tree the Research tab runs studies from |
 | `-bars` | `BNB_BARS` | `<data>/bars` | daily bars, `<SYMBOL>.parquet` |
 | `-risk` | `BNB_RISK` | _(defaults)_ | `risk.yaml`; see `risk.example.yaml` |
 | `-pin` | `BNB_PIN` | _(empty)_ | optional PIN; empty = open |
@@ -170,6 +178,11 @@ Server flags:
 | GET | `/api/bars` | bars per symbol and staleness |
 | POST | `/api/bars/refresh` | refill bars from Yahoo; never shortens a series |
 | GET | `/api/book` | the paper book: positions, orders, fills, history |
+| GET | `/api/research` | the research environment, the studies, the current and recent jobs |
+| POST | `/api/research/setup` | find or install `uv` and sync the Python environment |
+| POST | `/api/research/runs` | run a study (`{"study", "trainTo"}`), output pointed at this machine's specs and bars |
+| GET | `/api/research/jobs/{id}?from=N` | a job and its log from a byte offset |
+| DELETE | `/api/research/jobs/{id}` | cancel a running job |
 | GET | `/api/runs`, `/api/runs/{id}`, `/api/runs/{id}/jsonl` | journals |
 | POST | `/api/run` | today's cycle, now |
 

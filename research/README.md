@@ -30,6 +30,11 @@ uv run python scripts/etf_gld_ratio.py         # SPY, QQQ, VTI, XLK against GLD,
 uv run python scripts/etf_gld_ratio.py --csv-dir DIR   # from Kaggle-format SYMBOL.csv files
 ```
 
+Both scripts take `--specs-dir`, `--bars-dir` and `--out-dir` to put a
+promoted spec, the fetched bars and a rejected spec somewhere other than the
+checkout; the app's Research tab uses these to run a study on the trading
+machine with the output pointed at the runtime's own directories.
+
 Each script promotes its spec (`specs/gld_gdx_pairs.yaml`, `specs/etf_gld_ratio.yaml`) only when the out-of-sample
 Sharpe clears 1.0 on real data; otherwise the spec goes to `research/out/` as
 rejected, so the runtime never sees a strategy that did not earn it. The

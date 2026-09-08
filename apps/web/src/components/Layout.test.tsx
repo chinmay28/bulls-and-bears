@@ -64,10 +64,10 @@ describe('the header', () => {
 })
 
 describe('the tab bar', () => {
-  it('has the four sections in thumb order', () => {
+  it('has the five sections in thumb order', () => {
     const { host, root } = mount(<TabBar />)
     const labels = [...host.querySelectorAll('nav a')].map((a) => a.textContent)
-    expect(labels).toEqual(['Overview', 'Strategies', 'Book', 'Settings'])
+    expect(labels).toEqual(['Overview', 'Strategies', 'Research', 'Book', 'Settings'])
     act(() => root.unmount())
     host.remove()
   })
