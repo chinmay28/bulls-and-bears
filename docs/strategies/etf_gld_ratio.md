@@ -108,11 +108,16 @@ twice a week.
 **Verdict:** `research/out/etf_gld_ratio.rejected.yaml`, out-of-sample
 Sharpe 0.26. The spec was not promoted and the runtime would refuse it. The
 pipeline is complete — strategy in both languages, parity goldens, this
-study — so the question can be re-asked the moment the data allows:
+study — so the question is re-asked from the app: on the **Research** tab,
+the ETF/GLD card's **Run study** fetches from Yahoo on the trading machine,
+runs this same script with the training window ending on the date in the
+card (2019-12-31 by default, so 2020 onward is the one look out of sample),
+and installs the spec on Strategies only if it clears the floor. The log of
+the run, promoted or not, stays on the tab. From a terminal the same thing
+is:
 
 ```sh
-make golden-ratio                                  # from Yahoo, on a machine that can reach it
-make golden-ratio RATIO_FLAGS="--train-to 2019-12-31"   # a later split once 2018–2026 is in
+make golden-ratio RATIO_FLAGS="--train-to 2019-12-31"
 ```
 
 The 2018–2026 years are the ones this study could not see and the ones in
