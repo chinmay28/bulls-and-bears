@@ -1,0 +1,40 @@
+name: sector_rotation
+version: 1
+strategy: dual_momentum
+universe:
+- XLB
+- XLE
+- XLF
+- XLI
+- XLK
+- XLP
+- XLU
+- XLV
+- XLY
+- GLD
+params:
+  lookback: 126.0
+  top_k: 3.0
+  rebalance_days: 21.0
+execution:
+  signal_at: close
+  fill_at: next_open
+sizing:
+  gross_leverage: 1.0
+  max_notional_per_leg_usd: 2000.0
+provenance:
+  train_window:
+    from: '2005-02-25'
+    to: '2013-12-31'
+  test_window:
+    from: '2014-01-01'
+    to: '2017-11-10'
+  oos_sharpe: 0.7446407840301229
+  oos_max_drawdown: -0.1225808728053217
+  cost_model:
+    commission_usd: 0.0
+    slippage_bps: 5.0
+  research_git_sha: d2b2c39
+  generated_at: '2026-09-08T05:48:54Z'
+  ttl_days: 90
+  research_study: sector_rotation
