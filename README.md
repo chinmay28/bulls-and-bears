@@ -124,7 +124,11 @@ Five tabs, in HostMan's shape:
   once on at least a year out of sample and installs the spec only if it
   clears the floor — the same gate the script applies from a terminal. The
   log streams to the phone as it runs; a job can be cancelled; every log is
-  kept.
+  kept. **Re-validation** re-runs every installed spec once a month, outside
+  market hours, with its training cutoff held fixed: one that clears the
+  floor again is refreshed, one that does not is left to expire at its TTL.
+  A spec's own screen has its **Stage**: paper until the operator promotes it
+  to live, which is what a live broker will arm.
 - **Book** — equity over time, positions marked to market, working orders,
   fills with the price they got.
 - **Settings** — version, the halt state, the bars per symbol and whether
@@ -188,6 +192,12 @@ Server flags:
 | DELETE | `/api/research/jobs/{id}` | cancel a running job |
 | GET | `/api/runs`, `/api/runs/{id}`, `/api/runs/{id}/jsonl` | journals |
 | POST | `/api/run` | today's cycle, now |
+| GET | `/api/research` | the research tree, uv, the environment, the studies, the current job, the re-validation schedule |
+| POST | `/api/research/setup`, `/api/research/runs` | build the environment; run a study (`study`, `trainTo`, `universe`) |
+| GET, DELETE | `/api/research/jobs/{id}` | a job and its log from a byte offset; cancel it |
+| PUT | `/api/research/schedule` | turn the monthly re-validation on or off |
+| POST | `/api/research/schedule/run` | re-validate every installed spec now |
+| PUT | `/api/strategies/{name}/stage` | promote a spec to live, or back to paper |
 
 ## Development
 

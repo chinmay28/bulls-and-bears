@@ -18,6 +18,7 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/marketdata"
 	"github.com/chinmay28/bulls-and-bears/server/internal/marketdata/replay"
 	"github.com/chinmay28/bulls-and-bears/server/internal/risk"
+	"github.com/chinmay28/bulls-and-bears/server/internal/stage"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/pairs"
 )
 
@@ -339,5 +340,33 @@ func TestNoArmedReasonNamesTheProblem(t *testing.T) {
 				t.Errorf("noArmedReason() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestLiveModeArmsOnlyPromotedSpecs: research earns a spec its place on
+// paper; real money needs the operator's promotion.
+func TestLiveModeArmsOnlyPromotedSpecs(t *testing.T) {
+	f := setup(t, nil)
+	r := f.runner()
+	r.Cfg.Mode = "live"
+	out, err := r.Run(context.Background(), "2026-09-04")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Strategies) != 1 || out.Strategies[0].Armed || !strings.Contains(out.Strategies[0].Reason, "paper only") {
+		t.Fatalf("live run without a promotion: %+v", out.Strategies)
+	}
+	if out.Status != "failed" {
+		t.Errorf("status = %s, want failed (nothing armed)", out.Status)
+	}
+	if err := stage.Set(f.data, "gld_gdx_pairs", stage.Live); err != nil {
+		t.Fatal(err)
+	}
+	out, err = r.Run(context.Background(), "2026-09-04")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Strategies) != 1 || !out.Strategies[0].Armed {
+		t.Errorf("live run after promotion: %+v", out.Strategies)
 	}
 }

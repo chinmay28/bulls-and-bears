@@ -34,6 +34,7 @@ func researchServer(t *testing.T) (*Server, http.Handler) {
 	s.SpecsDir = t.TempDir()
 	s.BarsDir = t.TempDir()
 	s.Research = &research.Runner{Dir: dir, DataDir: s.DataDir, SpecsDir: s.SpecsDir, BarsDir: s.BarsDir, UV: uv, Log: s.Log}
+	s.Schedule = &research.Schedule{Runner: s.Research, SpecsDir: s.SpecsDir, DataDir: s.DataDir, Log: s.Log}
 	return s, h
 }
 
@@ -135,5 +136,68 @@ func TestResearchRunValidation(t *testing.T) {
 	}
 	if w := do(t, h, "DELETE", "/api/research/jobs/nope", ""); w.Code != http.StatusNotFound {
 		t.Errorf("cancel unknown = %d", w.Code)
+	}
+}
+
+func TestScheduleSwitchAndRevalidateNow(t *testing.T) {
+	_, h := researchServer(t)
+	info := decode[researchView](t, do(t, h, "GET", "/api/research", ""))
+	if info.Schedule == nil || !info.Schedule.Enabled || info.Schedule.Running {
+		t.Fatalf("schedule = %+v", info.Schedule)
+	}
+	if w := do(t, h, "PUT", "/api/research/schedule", `{"enabled":false}`); w.Code != http.StatusOK || decode[research.ScheduleView](t, w).Enabled {
+		t.Errorf("turning off = %d %s", w.Code, w.Body)
+	}
+	if w := do(t, h, "PUT", "/api/research/schedule", `{}`); w.Code != http.StatusBadRequest {
+		t.Errorf("empty body = %d", w.Code)
+	}
+	// Install a spec, then re-validate everything now.
+	src, err := os.ReadFile("../spec/testdata/gld_gdx_pairs.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := do(t, h, "POST", "/api/strategies", `{"yaml":`+strconv.Quote(string(src))+`}`); w.Code != http.StatusCreated {
+		t.Fatalf("import = %d %s", w.Code, w.Body)
+	}
+	if w := do(t, h, "POST", "/api/research/schedule/run", ""); w.Code != http.StatusAccepted {
+		t.Fatalf("revalidate now = %d %s", w.Code, w.Body)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		v := decode[researchView](t, do(t, h, "GET", "/api/research", ""))
+		if v.Schedule != nil && !v.Schedule.Running && len(v.Schedule.History) == 1 {
+			rec := v.Schedule.History[0]
+			if rec.Name != "gld_gdx_pairs" || rec.Study != "gld_gdx_pairs" || rec.Status != research.Succeeded {
+				t.Errorf("record = %+v", rec)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("re-validation never recorded: %+v", v.Schedule)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestStageIsTheOperatorsAndDefaultsToPaper(t *testing.T) {
+	_, h := researchServer(t)
+	src, err := os.ReadFile("../spec/testdata/gld_gdx_pairs.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := do(t, h, "POST", "/api/strategies", `{"yaml":`+strconv.Quote(string(src))+`}`); w.Code != http.StatusCreated {
+		t.Fatalf("import = %d %s", w.Code, w.Body)
+	}
+	if v := decode[strategyView](t, do(t, h, "GET", "/api/strategies/gld_gdx_pairs", "")); v.Stage != "paper" {
+		t.Errorf("stage = %q, want paper", v.Stage)
+	}
+	if w := do(t, h, "PUT", "/api/strategies/gld_gdx_pairs/stage", `{"stage":"live"}`); w.Code != http.StatusOK || decode[strategyView](t, w).Stage != "live" {
+		t.Errorf("promote = %d %s", w.Code, w.Body)
+	}
+	if w := do(t, h, "PUT", "/api/strategies/gld_gdx_pairs/stage", `{"stage":"real"}`); w.Code != http.StatusBadRequest {
+		t.Errorf("bad stage = %d", w.Code)
+	}
+	if w := do(t, h, "PUT", "/api/strategies/nope/stage", `{"stage":"live"}`); w.Code != http.StatusNotFound {
+		t.Errorf("unknown spec = %d", w.Code)
 	}
 }

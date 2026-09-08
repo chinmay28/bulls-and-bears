@@ -9,6 +9,7 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/backtest"
 	"github.com/chinmay28/bulls-and-bears/server/internal/bars"
 	"github.com/chinmay28/bulls-and-bears/server/internal/spec"
+	"github.com/chinmay28/bulls-and-bears/server/internal/stage"
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy"
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy/pairs"
 )
@@ -29,6 +30,9 @@ type strategyView struct {
 	// FreshDays is how long the TTL has left; Expires when it runs out.
 	FreshDays float64    `json:"freshDays"`
 	Expires   *time.Time `json:"expires,omitempty"`
+	// Stage is where the spec may trade: "paper" until the operator promotes
+	// it to "live". In dry-run every spec trades on paper regardless.
+	Stage string `json:"stage"`
 	// Signal is the strategy's current reading, null when bars are missing.
 	Signal *signalView `json:"signal"`
 	// SignalError says why Signal is null, when it is.
@@ -72,8 +76,12 @@ type signalView struct {
 // bars on disk.
 func (s *Server) strategies(now time.Time) []strategyView {
 	out := []strategyView{}
+	stages, stageErr := stage.Load(s.DataDir)
+	if stageErr != nil {
+		s.Log.Warn("api: cannot read the stages file; showing every spec as paper", "err", stageErr)
+	}
 	for _, l := range spec.LoadDir(s.SpecsDir, now) {
-		v := strategyView{Path: filepath.Base(l.Path), Name: nameOf(l)}
+		v := strategyView{Path: filepath.Base(l.Path), Name: nameOf(l), Stage: string(stage.Of(stages, nameOf(l)))}
 		var refused *spec.Refused
 		var invalid *spec.Invalid
 		switch {
@@ -174,6 +182,49 @@ func (s *Server) history(universe []string) (map[string][]bars.Bar, error) {
 		hist[sym] = series
 	}
 	return hist, nil
+}
+
+// handleSetStage promotes a spec to live or returns it to paper. It is the
+// operator's decision, recorded in the data directory: research cannot make
+// it and a re-validation cannot unmake it. It changes nothing in dry-run,
+// where every spec trades on paper; in live mode the runner arms only
+// promoted specs.
+func (s *Server) handleSetStage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	var body struct {
+		Stage string `json:"stage"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	st, err := stage.Parse(body.Stage)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	now := time.Now()
+	found := false
+	for _, v := range s.strategies(now) {
+		if v.Name == name {
+			found = true
+		}
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "no spec named "+name)
+		return
+	}
+	if err := stage.Set(s.DataDir, name, st); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.Log.Info("spec stage set", "name", name, "stage", st)
+	for _, v := range s.strategies(now) {
+		if v.Name == name {
+			writeJSON(w, http.StatusOK, v)
+			return
+		}
+	}
 }
 
 func (s *Server) handleListStrategies(w http.ResponseWriter, r *http.Request) {

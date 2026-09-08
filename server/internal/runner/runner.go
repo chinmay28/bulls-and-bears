@@ -29,6 +29,7 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/marketdata"
 	"github.com/chinmay28/bulls-and-bears/server/internal/risk"
 	"github.com/chinmay28/bulls-and-bears/server/internal/spec"
+	"github.com/chinmay28/bulls-and-bears/server/internal/stage"
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy"
 )
 
@@ -143,12 +144,26 @@ func (r *Runner) Run(ctx context.Context, runID string) (Outcome, error) {
 	// journalled with its reason, so a run that trades nothing says on the
 	// phone which specs it saw and why it refused them.
 	loaded := spec.LoadDir(r.Cfg.SpecsDir, now())
+	// In live mode a spec also needs the operator's promotion (package
+	// stage); research earns a spec its place on paper, not with real money.
+	var stages map[string]stage.Stage
+	if r.Cfg.Mode == "live" {
+		st, err := stage.Load(r.Cfg.DataDir)
+		if err != nil {
+			return fail("stages: " + err.Error())
+		}
+		stages = st
+	}
 	var armed []armedSpec
 	for _, l := range loaded {
 		so := StrategyOutcome{Path: l.Path}
-		if l.Err != nil {
+		switch {
+		case l.Err != nil:
 			so.Reason = l.Err.Error()
-		} else {
+		case stages != nil && stage.Of(stages, l.Spec.Name) != stage.Live:
+			so.Name = l.Spec.Name
+			so.Reason = "paper only: not promoted to live"
+		default:
 			so.Name = l.Spec.Name
 			st, err := strategy.New(l.Spec.Strategy, l.Spec.Universe, l.Spec.Params, l.Spec.Sizing)
 			if err != nil {

@@ -34,8 +34,10 @@ type Server struct {
 	// runs without one, and the refresh endpoint then says so.
 	Fetcher refill.Fetcher
 	// Research runs the Python studies from the app; nil when the server
-	// has no research tree, and the Research tab then says so.
+	// has no research tree, and the Research tab then says so. Schedule is
+	// the monthly re-validation of installed specs; nil without a Research.
 	Research *research.Runner
+	Schedule *research.Schedule
 	// RunNow performs a cycle for a run id; nil when there is no runner.
 	RunNow func(ctx context.Context, runID string) (runner.Outcome, error)
 	// RunOffset is how long before the close the scheduler fires.
@@ -76,6 +78,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/research/runs", s.handleResearchRun)
 	mux.HandleFunc("GET /api/research/jobs/{id}", s.handleResearchJob)
 	mux.HandleFunc("DELETE /api/research/jobs/{id}", s.handleResearchCancel)
+	mux.HandleFunc("PUT /api/research/schedule", s.handleResearchSchedule)
+	mux.HandleFunc("POST /api/research/schedule/run", s.handleResearchRevalidate)
+	mux.HandleFunc("PUT /api/strategies/{name}/stage", s.handleSetStage)
 
 	mux.HandleFunc("GET /api/runs", s.handleListRuns)
 	mux.HandleFunc("GET /api/runs/{id}", s.handleGetRun)

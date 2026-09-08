@@ -46,8 +46,8 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/sched"
 	"github.com/chinmay28/bulls-and-bears/server/internal/spec"
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy"
-	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/pairs"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/momentum"
+	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/pairs"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/ratio"
 	_ "github.com/chinmay28/bulls-and-bears/server/internal/strategy/trend"
 	"github.com/chinmay28/bulls-and-bears/server/internal/version"
@@ -163,6 +163,15 @@ func run(args []string) error {
 	}
 	defer book.Close()
 
+	researcher := &research.Runner{
+		Dir: t.researchDir, DataDir: t.dataDir, SpecsDir: t.specsDir, BarsDir: t.barsDir,
+		Installer: &research.Installer{Client: &http.Client{Timeout: 10 * time.Minute}}, Log: log,
+	}
+	// Once a month, outside market hours, every installed spec is re-run
+	// with its training cutoff fixed; a spec that no longer earns its place
+	// is left to expire at its TTL.
+	schedule := &research.Schedule{Runner: researcher, SpecsDir: t.specsDir, DataDir: t.dataDir, Log: log}
+
 	auth := api.NewPinAuth(*pin)
 	apiSrv := &api.Server{
 		Log: log, Version: appVersion(), DataDir: t.dataDir, SpecsDir: t.specsDir, BarsDir: t.barsDir,
@@ -174,10 +183,8 @@ func run(args []string) error {
 		Fetcher: &yahoo.Client{HTTP: &http.Client{Timeout: 30 * time.Second}},
 		// The studies run from the phone with their output pointed at the
 		// directories above; uv is downloaded if the machine has none.
-		Research: &research.Runner{
-			Dir: t.researchDir, DataDir: t.dataDir, SpecsDir: t.specsDir, BarsDir: t.barsDir,
-			Installer: &research.Installer{Client: &http.Client{Timeout: 10 * time.Minute}}, Log: log,
-		},
+		Research: researcher,
+		Schedule: schedule,
 	}
 
 	loop := &sched.Loop{
@@ -197,6 +204,7 @@ func run(args []string) error {
 		Log: log,
 	}
 	go loop.Serve(ctx)
+	go schedule.Serve(ctx)
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiSrv.Routes())
