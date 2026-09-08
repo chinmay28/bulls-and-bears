@@ -11,7 +11,7 @@ VERSION_PKG := github.com/chinmay28/bulls-and-bears/server/internal/version
 PATCH := $(shell node scripts/version.mjs --patch 2>/dev/null)
 LDFLAGS := -s -w $(if $(PATCH),-X $(VERSION_PKG).Patch=$(PATCH))
 
-.PHONY: build server web icons test test-web test-icongen test-installer test-research vet lint run clean version bump-version golden golden-ratio parity backtest-compare backtest-compare-ratio
+.PHONY: build server web icons test test-web test-icongen test-installer test-research vet lint run clean version bump-version golden golden-ratio golden-fixtures golden-study parity backtest-compare backtest-compare-ratio
 
 ## build: PWA into the embed directory, then the single binary
 build: web server
@@ -68,7 +68,7 @@ golden:
 
 ## parity: the Go tests that hold the runtime to the research side's goldens
 parity:
-	cd server && $(GO) test -race -run 'Parity' ./internal/strategy/... ./internal/metrics/... ./internal/backtest/...
+	cd server && $(GO) test -race -run 'Parity' ./internal/strategy/... ./internal/metrics/... ./internal/backtest/... ./internal/indicator/...
 
 ## backtest-compare: run the Go backtester over the golden bars and print its
 ## numbers next to the Python side's metrics.json
@@ -100,3 +100,13 @@ clean:
 ## Yahoo; RATIO_FLAGS=--csv-dir DIR reads Kaggle-format CSVs when Yahoo is out of reach)
 golden-ratio:
 	cd research && uv run python scripts/etf_gld_ratio.py $(RATIO_FLAGS)
+
+## golden-fixtures: the synthetic parity fixtures for the next-open fill and the
+## indicators (no network); commit the result with any change to either side
+golden-fixtures:
+	cd research && uv run python scripts/golden_next_open.py && uv run python scripts/golden_indicators.py
+
+## golden-study: one study's parity fixtures and spec, e.g.
+## make golden-study STUDY=time_series_momentum STUDY_FLAGS="--csv-dir data/kaggle"
+golden-study:
+	cd research && uv run python scripts/$(STUDY).py $(STUDY_FLAGS)
