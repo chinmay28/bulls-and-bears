@@ -1,0 +1,35 @@
+name: risk_parity_trend
+version: 1
+strategy: risk_parity_trend
+universe:
+- SPY
+- QQQ
+- IWM
+- TLT
+- GLD
+params:
+  trend_lookback: 252.0
+  vol_lookback: 63.0
+  rebalance_days: 21.0
+execution:
+  signal_at: close
+  fill_at: next_open
+sizing:
+  gross_leverage: 1.0
+  max_notional_per_leg_usd: 2000.0
+provenance:
+  train_window:
+    from: '2005-02-25'
+    to: '2013-12-31'
+  test_window:
+    from: '2014-01-01'
+    to: '2017-11-10'
+  oos_sharpe: 0.7485398536853467
+  oos_max_drawdown: -0.18320209345399874
+  cost_model:
+    commission_usd: 0.0
+    slippage_bps: 5.0
+  research_git_sha: 0ebcd0f
+  generated_at: '2026-09-08T05:40:58Z'
+  ttl_days: 90
+  research_study: risk_parity_trend
