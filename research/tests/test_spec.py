@@ -37,6 +37,13 @@ def test_spec_validates_and_round_trips(tmp_path: Path) -> None:
     assert back["provenance"]["generated_at"] == "2026-09-06T00:00:00Z"
 
 
+def test_every_registered_strategy_name_validates() -> None:
+    validate(a_spec(strategy="pairs_zscore"))
+    validate(a_spec(name="etf_gld_ratio", strategy="ratio_reversion",
+                    universe=["SPY", "QQQ", "VTI", "XLK", "GLD"],
+                    params={"lookback": 20, "entry_z": 2.0, "exit_z": 0.5, "max_hold_days": 8}))
+
+
 def test_invalid_spec_is_refused_before_writing(tmp_path: Path) -> None:
     spec = a_spec(strategy="momentum_of_the_week")
     with pytest.raises(jsonschema.ValidationError):

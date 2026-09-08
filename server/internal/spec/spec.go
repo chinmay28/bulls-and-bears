@@ -82,10 +82,13 @@ type Invalid struct {
 func (e *Invalid) Error() string { return e.Path + ": not a strategy spec: " + e.Reason }
 
 // Refused says the spec is well formed but this runtime will not run it.
-// Fixing it means re-running research (or registering the strategy).
+// Fixing it means re-running research (or registering the strategy). Spec is
+// the spec anyway, for callers that knowingly look past the refusal — a
+// backtest of a rejected spec, a UI listing what it would have run.
 type Refused struct {
 	Path   string
 	Reason string
+	Spec   *Spec
 }
 
 func (e *Refused) Error() string { return e.Path + ": refused: " + e.Reason }
@@ -110,7 +113,7 @@ func Check(src []byte, path string, now time.Time) (*Spec, error) {
 		return nil, &Invalid{Path: path, Reason: err.Error()}
 	}
 	if reason := refusal(s, now); reason != "" {
-		return nil, &Refused{Path: path, Reason: reason}
+		return nil, &Refused{Path: path, Reason: reason, Spec: s}
 	}
 	return s, nil
 }

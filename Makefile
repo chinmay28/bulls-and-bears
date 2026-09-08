@@ -11,7 +11,7 @@ VERSION_PKG := github.com/chinmay28/bulls-and-bears/server/internal/version
 PATCH := $(shell node scripts/version.mjs --patch 2>/dev/null)
 LDFLAGS := -s -w $(if $(PATCH),-X $(VERSION_PKG).Patch=$(PATCH))
 
-.PHONY: build server web icons test test-web test-icongen test-installer test-research vet lint run clean version bump-version golden parity backtest-compare
+.PHONY: build server web icons test test-web test-icongen test-installer test-research vet lint run clean version bump-version golden golden-ratio parity backtest-compare backtest-compare-ratio
 
 ## build: PWA into the embed directory, then the single binary
 build: web server
@@ -77,6 +77,12 @@ backtest-compare: server
 	./$(BIN) backtest -spec golden/gld_gdx/spec.yaml -bars bin/golden-bars -ignore-refusal
 	@echo "python:" && cat golden/gld_gdx/metrics.json
 
+## backtest-compare-ratio: the same for the ETF/GLD ratio study's goldens
+backtest-compare-ratio: server
+	@mkdir -p bin/ratio-bars && for s in SPY QQQ VTI XLK GLD; do cp golden/etf_gld_ratio/bars_$$s.parquet bin/ratio-bars/$$s.parquet; done
+	./$(BIN) backtest -spec golden/etf_gld_ratio/spec.yaml -bars bin/ratio-bars -ignore-refusal
+	@echo "python:" && cat golden/etf_gld_ratio/metrics.json
+
 vet:
 	cd server && $(GO) vet ./...
 
@@ -89,3 +95,8 @@ run: server
 
 clean:
 	rm -rf bin
+
+## golden-ratio: the ETF/GLD ratio study's parity fixtures and spec (fetches from
+## Yahoo; RATIO_FLAGS=--csv-dir DIR reads Kaggle-format CSVs when Yahoo is out of reach)
+golden-ratio:
+	cd research && uv run python scripts/etf_gld_ratio.py $(RATIO_FLAGS)

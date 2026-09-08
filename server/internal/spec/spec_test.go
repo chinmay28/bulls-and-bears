@@ -240,6 +240,11 @@ func TestLoadRejects(t *testing.T) {
 				if ref.Path != path {
 					t.Errorf("path = %q, want %q", ref.Path, path)
 				}
+				// A refusal is policy, not a parse failure: the spec rides
+				// along for callers that knowingly look past it.
+				if ref.Spec == nil || ref.Spec.Name != "gld_gdx_pairs" {
+					t.Errorf("refused spec = %+v, want the parsed spec", ref.Spec)
+				}
 			}
 		})
 	}
