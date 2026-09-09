@@ -4,6 +4,7 @@ import { Page } from '../components/Layout'
 import { RunBadge } from '../components/status'
 import { Banner, Card, Loading, useLoader } from '../components/ui'
 import { clock, parts, time } from '../lib/format'
+import { invocationCount, latestInvocation } from '../lib/journal'
 import type { JournalEvent } from '../types'
 
 /** One run's journal, line by line: the quote as it was seen, the targets,
@@ -13,6 +14,9 @@ export default function RunDetail() {
   const { id = '' } = useParams()
   const { data, error, offline } = useLoader(() => api.run(id), [id], 10000)
   const run = data?.run
+  // The counts and the strip cover the whole file; the next step covers the
+  // last invocation, which is the only one still true (lib/journal).
+  const runs = data ? invocationCount(data.events) : 0
 
   return (
     <Page
@@ -47,6 +51,11 @@ export default function RunDetail() {
             <div className="sub" style={{ marginTop: 6 }}>
               {run.invariant ? run.invariant : 'Every order follows an allowed risk decision with the same intent id.'}
             </div>
+            {runs > 1 && (
+              <div className="sub" style={{ marginTop: 6 }}>
+                Run {runs} times under this date: the counts above are the totals, the badge is the last run.
+              </div>
+            )}
             {data.truncated && (
               <div style={{ marginTop: 10 }}>
                 <Banner tone="warn">The journal ends mid-line: the process stopped while writing.</Banner>
@@ -54,7 +63,7 @@ export default function RunDetail() {
             )}
           </Card>
 
-          <NextStep events={data.events} />
+          <NextStep events={latestInvocation(data.events)} />
 
           <Card>
             {data.events.map((e, i) => (
@@ -73,8 +82,13 @@ export default function RunDetail() {
 /** NextStep turns the two failures an operator can actually fix into the tap
  *  that fixes them. A run that ends "no armed strategy" or "bars: ... stale"
  *  is not a bug to report, it is a missing spec or missing bars — and both
- *  now have a screen. Anything else is left to the journal below. */
-function NextStep({ events }: { events: JournalEvent[] }) {
+ *  now have a screen. Anything else is left to the journal below.
+ *
+ *  It must be given one invocation's events, not the whole file: a re-run that
+ *  armed and completed leaves the failed attempt's error behind it in the same
+ *  journal, and pointing the operator at Strategies over a failure they have
+ *  already fixed is worse than saying nothing. */
+export function NextStep({ events }: { events: JournalEvent[] }) {
   const failure = [...events].reverse().find((e) => e.kind === 'error')
   const text = failure ? String((failure.data as { error?: string } | undefined)?.error ?? '') : ''
   if (!text) return null
