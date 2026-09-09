@@ -209,12 +209,18 @@ func (k Kind) String() string {
 // Intent is one order to place. Limit zero means a market order, which the
 // rules ask for on the equity legs and forbid on the option legs.
 type Intent struct {
-	Kind     Kind
-	Symbol   string
-	Qty      float64
-	Limit    float64
-	OptionID string
-	Why      string
+	Kind   Kind
+	Symbol string
+	Qty    float64
+	Limit  float64
+	// OptionID, Strike and Expiration describe the contract on an option
+	// intent, and are zero on an equity one. The contract is carried whole
+	// so that whatever settles the fill does not have to look it up again
+	// and risk a different answer.
+	OptionID   string
+	Strike     float64
+	Expiration time.Time
+	Why        string
 }
 
 // Plan is the answer: what to place now, what the state becomes once the
