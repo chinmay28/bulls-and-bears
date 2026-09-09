@@ -1,13 +1,28 @@
 # Discovery
 
 Phase 0 findings about the Robinhood Trading MCP, and every place the plan and
-reality disagreed. Nothing here is verified yet: the questions below are open
-until someone has completed the desktop OAuth flow and called `tools/list`.
+reality disagreed. The §10 questions below are answered as far as read-only
+calls against the live server can answer them ("The Robinhood MCP, read off
+the live server"); what is left needs the desktop OAuth flow and a
+`tools/list` from `bnb` itself.
 
 ## Status
 
-Not started: `tools/list` has not been called and `docs/discovery/` is
-empty. The tooling for it exists. On a machine with a browser:
+Partly answered, and not by `bnb`. The questions below were answered on
+2026-09-09 from a Claude Code session with the Robinhood MCP attached
+directly, by calling the read-only tools against the live account. That is
+not the same as `bnb discover`: it says what the *server* exposes, not that
+the Go client can reach it. `docs/discovery/tools_list.json` is still empty
+and the OAuth flow below is still the way to fill it.
+
+What was learned, and what it costs the XLK/SATA rotation, is in "The
+agentic account, as it stands" below. The short version: the account this
+agent may trade holds $394.98, all of it crypto, with $0.00 buying power and
+options not enabled, so that strategy cannot place a single one of its
+orders today.
+
+Still not started for the Go client: `tools/list` has not been called from
+`bnb` and `docs/discovery/` is empty. The tooling for it exists. On a machine with a browser:
 
 ```sh
 bnb login -data ~/bnb-data                # OAuth in the browser; writes robinhood-token.json
@@ -26,11 +41,15 @@ request/response pairs under `docs/discovery/samples/`.
 
 ## Open questions (from `docs/PLAN.md` §10)
 
+Answered below in "The Robinhood MCP, read off the live server", except
+where marked.
+
 1. Does the MCP provide historical bars? At what depth, and are they adjusted?
 2. Quote timestamp semantics, and staleness during pre- and post-market.
 3. Order types (market, limit, stop) and time-in-force supported.
 4. How fills are surfaced: polling order status, or an events tool.
-5. Rate limits and token lifetime; does refresh work headlessly on the homelab?
+5. Rate limits and token lifetime; does refresh work headlessly on the
+   homelab? — **still open**, and not answerable from a read-only session.
 6. Fractional-share support for the pairs legs.
 
 ## Decisions
@@ -75,6 +94,134 @@ not a way around provenance: an upload goes through `spec.Check`, the same
 schema, the same 1.0 out-of-sample Sharpe floor and the same TTL a run
 applies, and a spec that would be refused is not written at all. Research
 still has to have earned it — the file just no longer has to arrive by scp.
+
+## The Robinhood MCP, read off the live server
+
+Answers to §10 as far as read-only calls can give them, 2026-09-09.
+
+**Accounts.** `get_accounts` returns every account with an `agentic_allowed`
+flag. Exactly one is true — the account the agent may trade — and it is not
+the default account. The runtime's §9 assertion (trade only the configured
+account, halt otherwise) has a field to check it against.
+
+**Historical bars: still no.** Nothing in the tool list returns daily OHLCV
+for an equity. `get_equity_historicals` exists but was not exercised; the
+§2 decision stands unchanged — Yahoo is the history, the MCP is the quote.
+
+**Quotes.** `get_equity_quotes` gives `bid_price`, `ask_price`,
+`last_trade_price`, a separate `last_non_reg_trade_price` for extended
+hours, and per-field venue timestamps, plus the official prior-session close
+with its own `source`. The timestamps are per field, so the staleness rule
+in §6 has something real to measure. Outside regular hours the regular-hours
+last trade goes stale while bid/ask keep updating, which is exactly the case
+the rule exists for.
+
+**Options: available, and richer than assumed.** §2 guessed equities only.
+In fact `get_option_chains` gives expirations and the chain's `min_ticks`
+(0.01 below a 3.00 cutoff, 0.05 at and above — a limit price off the tick is
+rejected), `get_option_instruments` gives per-contract ids, strikes and
+`tradability`, and **`get_option_quotes` carries `delta`, gamma, theta, vega,
+implied volatility, open interest and volume** alongside bid/ask/mark. A
+delta-targeted rule can therefore be written without a pricing model of our
+own. Chains also publish `sellout_time_to_expiration` (1800s on XLK): the
+broker force-closes a short contract near expiry, which is an exit the
+runtime does not control and must expect.
+
+**Order types.** Equities: market, limit, stop_market, stop_limit; `gfd` or
+`gtc`; a `market_hours` selector for regular, extended and overnight
+sessions, where only limit orders execute outside regular hours. Options:
+limit, market, stop_limit, stop_market, single-leg at option level 2 and
+multi-leg at level 3. Both take a `ref_id` idempotency key, which is what
+`internal/mcp`'s "never retry an order" rule can be relaxed against later.
+
+**Fills.** Polled, not pushed: `get_equity_orders` and `get_option_orders`
+filter by state (`filled`, `partially_filled`, `rejected`, `cancelled`, …)
+and by `created_at_gte`, and carry a `placed_agent` field that separates the
+agent's own orders from the operator's. There is no events tool, so the
+runner polls.
+
+**Review before place.** `review_equity_order` and `review_option_order`
+simulate an order and return pre-trade alerts (buying power, PDT, halts).
+They are the natural place to put the §6 confirmation threshold.
+
+**Not answered:** rate limits, token lifetime, and whether refresh works
+headlessly — none of which a read-only session can establish. Fractional
+shares are documented as market-order-and-regular-hours only.
+
+## The agentic account, as it stands
+
+The only `agentic_allowed` account is a limited-margin individual account
+holding **$394.98, all of it crypto**: `equity_value` 0, `options_value` 0,
+`cash` 0, `buying_power` **0.00**, no equity positions, no option positions.
+Its `option_level` is empty.
+
+Three consequences for `xlk_sata_rotation`, all of them hard:
+
+1. **It cannot buy the lot.** 100 XLK is about $18,800 against $0.00 of
+   buying power.
+2. **It cannot write the covered call.** `place_option_order` rejects an
+   account whose `option_level` is empty; the whole recovery leg is
+   unreachable until options are enabled on *that* account. Three other
+   accounts have option level 2 or 3, and none of them is tradable by this
+   agent.
+3. **It cannot park in SATA**, having no cash to park.
+
+The other accounts are readable and not tradable, by Robinhood's design,
+so none of this is worked around in code. Funding and options approval are
+operator actions taken in the Robinhood app, and until they happen the
+strategy is a dry-run strategy whatever mode it is asked to run in.
+
+Noted for when it is funded: the account is `limited_margin`, and the rules
+say not to use margin. The engine enforces that itself — every buy is capped
+at settled cash — rather than trusting the account type.
+
+## A strategy the weights interface cannot express
+
+`xlk_sata_rotation` (docs/strategies/xlk_sata_rotation.md) is the first
+strategy that does not fit `strategy.Strategy`, and the plan's §0 says to
+record the discrepancy and adapt the component rather than the architecture.
+
+`Targets(hist, pos) -> map[symbol]weight` is a function of daily bars
+answering in fractions of equity. This strategy needs to say "exactly 100
+shares, never 99"; it trades an instrument that is not in any bar file; it
+decides at two intraday clock times rather than once against a bar; and its
+decision depends on state no bar carries — the entry price of the open lot,
+the premium already collected against it, and whether the midday review has
+been passed. None of that survives a weight vector.
+
+So `internal/strategy/xlksata` keeps the principle and drops the signature.
+`Decide(Snapshot) -> Plan` is still pure — no I/O, no clock, no randomness,
+same function in a test, a dry run and live — and the impurity is pushed to
+the edges the way it already is elsewhere: the caller reads the book, and
+the `Apply*` functions fold fills back into state. It is not in the
+`strategy` registry, because a spec naming it would be a spec the runner
+would try to ask for weights.
+
+What this costs: no parity test, because there is no Python implementation
+and no golden file; and no backtest, because `internal/backtest` replays
+daily bars through `Targets`. Neither is written off — §4.3 applies the day
+a study exists — but both are absent today, which is the largest reason the
+strategy is not armed.
+
+## What is not built yet for the rotation
+
+The engine decides; nothing yet carries its decisions to the broker. Missing,
+in the order it would be built:
+
+- **A Robinhood broker and market data adapter** over `internal/mcp`.
+  `broker.Broker` has no options in it: `Order` is a symbol, a side, a
+  quantity and a limit, with no contract id, no `position_effect` and no
+  multiplier. Extending it is a contract change to weigh against a second
+  interface beside it.
+- **An intraday scheduler.** `sched.Loop` fires once, ten minutes before the
+  close. This strategy needs 07:12 PT, 12:07 PT and manage cycles between,
+  which is the same "second fire time" work the Execution timing section
+  above already wants for `next_open` specs.
+- **Persisted lot state.** `State` has to survive a restart mid-recovery, in
+  the data directory beside `internal/stage`'s file. Reconstructing it from
+  order history is possible and is not the same thing.
+- **A risk gate that understands an option obligation.** §6's rules are
+  written in notional and leverage; a short call's risk is neither.
 
 ## Research data when Yahoo is unreachable
 
