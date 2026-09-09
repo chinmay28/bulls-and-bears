@@ -46,9 +46,13 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 		riskPath = fs.String("risk", envOr("BNB_RISK", ""), "risk.yaml with the gate's thresholds; default: the plan's defaults")
 		maxOrder = fs.Float64("max-order-usd", 0, "refuse any single order above this notional; 0 is uncapped")
 		yes      = fs.Bool("yes", false, "place live orders over the confirmation threshold without asking; a 100-share lot is always over it")
+		history  = fs.Bool("history", false, "print every book the ledger holds and exit; touches nothing")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *history {
+		return printHistory(*dataDir)
 	}
 	if *account == "" {
 		return errors.New("rotate: -account is required; this places real orders and will not guess which account in")
@@ -56,6 +60,14 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 	if err := os.MkdirAll(*dataDir, 0o700); err != nil {
 		return err
 	}
+
+	// One rotation per data directory. Two would each read a flat book, each
+	// decide to open the lot, and each open one.
+	lock, err := rotation.Acquire(*dataDir)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	engine, err := xlksata.New(xlksata.Defaults())
@@ -169,6 +181,36 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 	}
 	log.Info("rotate: serving", "entry", "07:12 PT", "review", "12:07 PT", "manage_every", *manage)
 	loop.Serve(ctx)
+	return nil
+}
+
+// printHistory dumps the ledger: every state the book has been in, with the
+// time it was written. Read-only, and it does not need the broker, so it
+// works on a copied data directory.
+func printHistory(dataDir string) error {
+	books, err := rotation.History(dataDir)
+	if err != nil {
+		return err
+	}
+	if len(books) == 0 {
+		fmt.Printf("no ledger at %s\n", rotation.LedgerFile(dataDir))
+		return nil
+	}
+	for _, b := range books {
+		line := fmt.Sprintf("%s  %-8s", b.At.Format(time.RFC3339), b.State.Mode)
+		if b.State.Open() {
+			line += fmt.Sprintf(" entry %.4f  option %+.2f  div %+.2f  cost %.2f",
+				b.State.EntryPrice, b.State.OptionPnL, b.State.Dividends, b.State.Costs)
+		}
+		if c := b.State.ShortCall; c != nil {
+			line += fmt.Sprintf("  short %s %.2f @ %.2f", c.Expiration.Format("2006-01-02"), c.Strike, c.Credit)
+		}
+		if p := b.Pending; p != nil {
+			line += fmt.Sprintf("  pending %s %s", p.Kind, p.OrderID)
+		}
+		fmt.Println(line)
+	}
+	fmt.Printf("\n%d entries in %s\n", len(books), rotation.LedgerFile(dataDir))
 	return nil
 }
 

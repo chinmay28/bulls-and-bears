@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -65,12 +64,12 @@ func TestStateRoundTrip(t *testing.T) {
 	}
 }
 
-func TestStateFileIsPrivate(t *testing.T) {
+func TestLedgerFileIsPrivate(t *testing.T) {
 	dir := t.TempDir()
 	if err := Save(dir, Book{State: xlksata.State{Mode: xlksata.Held, EntryPrice: 1}}, now); err != nil {
 		t.Fatal(err)
 	}
-	fi, err := os.Stat(StateFile(dir))
+	fi, err := os.Stat(LedgerFile(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,11 +78,10 @@ func TestStateFileIsPrivate(t *testing.T) {
 	}
 }
 
-// Forgetting an open lot would open a second one on top of it, so an
-// unreadable state file is an error and never a flat book.
+// Forgetting an open lot would open a second one on top of it, so a line
+// that parses and does not make sense is an error, never a flat book.
 func TestUnreadableStateIsNeverAFlatBook(t *testing.T) {
 	cases := map[string]string{
-		"not json":       `{`,
 		"wrong version":  `{"version":99,"mode":"flat"}`,
 		"unknown mode":   `{"version":1,"mode":"sideways"}`,
 		"open, no entry": `{"version":1,"mode":"recovery","state":{"entry_price":0}}`,
@@ -91,13 +89,144 @@ func TestUnreadableStateIsNeverAFlatBook(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "rotation.json"), []byte(body), 0o600); err != nil {
-				t.Fatal(err)
-			}
+			writeLedger(t, dir, body)
 			if got, err := Load(dir); err == nil {
 				t.Fatalf("want an error, got %+v", got)
 			}
 		})
+	}
+}
+
+// The crash this format is shaped to survive: the process died partway
+// through appending. The torn line is skipped and the book is the one before
+// it — one cycle stale, but whole.
+func TestTornFinalLineFallsBackToTheOneBefore(t *testing.T) {
+	dir := t.TempDir()
+	want := xlksata.State{Mode: xlksata.Recovery, EntryPrice: 187, EntryDate: now, OptionPnL: 90}
+	if err := Save(dir, Book{State: want}, now); err != nil {
+		t.Fatal(err)
+	}
+	// A short write: the line the process never finished.
+	f, err := os.OpenFile(LedgerFile(dir), os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(`{"ts":"2026-09-09T19:12:00Z","versi`); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatalf("a torn final line should not stop a start-up: %v", err)
+	}
+	if got.State.Mode != want.Mode || got.State.EntryPrice != want.EntryPrice || got.State.OptionPnL != want.OptionPnL {
+		t.Fatalf("got %+v, want the previous book %+v", got.State, want)
+	}
+}
+
+// A torn line earlier in the file is simply old: the last whole line wins,
+// because that is the book.
+func TestTheLastWholeLineWins(t *testing.T) {
+	dir := t.TempDir()
+	writeLedger(t, dir, "{not json at all",
+		`{"version":1,"mode":"held","state":{"entry_price":180},"marks":{}}`,
+		`{"version":1,"mode":"recovery","state":{"entry_price":187},"marks":{}}`)
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State.Mode != xlksata.Recovery || got.State.EntryPrice != 187 {
+		t.Fatalf("got %+v", got.State)
+	}
+}
+
+// Nothing is ever rewritten, so every book the directory has held is still
+// there, in order, with the time it was written.
+func TestLedgerKeepsTheHistory(t *testing.T) {
+	dir := t.TempDir()
+	steps := []xlksata.State{
+		{},
+		{Mode: xlksata.Held, EntryPrice: 187, EntryDate: now},
+		{Mode: xlksata.Recovery, EntryPrice: 187, EntryDate: now},
+		{Mode: xlksata.Recovery, EntryPrice: 187, EntryDate: now, OptionPnL: 85},
+		{},
+	}
+	for i, st := range steps {
+		if err := Save(dir, Book{State: st}, now.Add(time.Duration(i)*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hist, err := History(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hist) != len(steps) {
+		t.Fatalf("got %d books, want %d", len(hist), len(steps))
+	}
+	for i, b := range hist {
+		if b.State.Mode != steps[i].Mode || b.State.OptionPnL != steps[i].OptionPnL {
+			t.Errorf("book %d: got %+v, want %+v", i, b.State, steps[i])
+		}
+		if b.At.IsZero() {
+			t.Errorf("book %d has no timestamp", i)
+		}
+		if i > 0 && b.At.Before(hist[i-1].At) {
+			t.Errorf("book %d is timestamped before book %d", i, i-1)
+		}
+	}
+	// And the current book is the last of them.
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != (xlksata.State{}) {
+		t.Fatalf("got %+v, want the last book", got.State)
+	}
+}
+
+// Two rotations over one directory would each read a flat book, each decide
+// to buy, and each buy. The lock is what stops that.
+func TestLockIsExclusive(t *testing.T) {
+	dir := t.TempDir()
+	first, err := Acquire(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Acquire(dir); err == nil {
+		t.Fatal("a second holder got the lock")
+	}
+	if err := first.Release(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := Acquire(dir)
+	if err != nil {
+		t.Fatalf("the lock was not released: %v", err)
+	}
+	if err := second.Release(); err != nil {
+		t.Fatal(err)
+	}
+	// Releasing twice, and releasing a nil lock, are both fine.
+	if err := second.Release(); err != nil {
+		t.Fatal(err)
+	}
+	var nilLock *Lock
+	if err := nilLock.Release(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeLedger(t *testing.T, dir string, lines ...string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := ""
+	for _, l := range lines {
+		body += l + "\n"
+	}
+	if err := os.WriteFile(LedgerFile(dir), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

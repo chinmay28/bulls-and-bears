@@ -11,18 +11,34 @@
 package rotation
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy/xlksata"
 )
 
-// StateFile is where a data directory keeps the open lot.
-func StateFile(dataDir string) string { return filepath.Join(dataDir, "rotation.json") }
+// LedgerFile is where a data directory keeps the book: one timestamped JSON
+// object per line, appended and never rewritten, exactly as internal/journal
+// keeps a run.
+//
+// A line is a whole snapshot of the book rather than an event to fold,
+// which is the choice worth explaining. The *why* of every change is already
+// in the journal — the quote, the decision, the order — so an event log here
+// would say the same things twice and put the burden of correctness on a
+// replay. What this file has to survive instead is a crash, and a snapshot
+// per line survives it in the way that matters: the last line may be torn,
+// and the line before it is a complete and consistent book, one cycle stale.
+// A fold over a torn event log loses the same cycle with more machinery.
+//
+// The history is the side benefit and it is a real one: every state the book
+// has ever been in, timestamped, is still in the file.
+func LedgerFile(dataDir string) string { return filepath.Join(dataDir, "rotation.jsonl") }
 
 // Pending is an order that has been placed and not yet accounted for.
 //
@@ -81,10 +97,8 @@ func (m Marks) Roll(day string, equity float64) Marks {
 		next.HighWaterEquity = equity
 	}
 	// A first run has no previous day to judge.
-	if m.Day != "" {
-		if m.LimitHitToday {
-			next.DailyLimitHits = m.DailyLimitHits + 1
-		}
+	if m.Day != "" && m.LimitHitToday {
+		next.DailyLimitHits = m.DailyLimitHits + 1
 	}
 	return next
 }
@@ -95,11 +109,15 @@ type Book struct {
 	State   xlksata.State
 	Pending *Pending
 	Marks   Marks
+	// At is when this book was written. Zero on a book that has never been
+	// saved, which is a data directory that has never run.
+	At time.Time
 }
 
-type stored struct {
+// line is the on-disk shape of one appended book.
+type line struct {
+	TS        time.Time      `json:"ts"`
 	Version   int            `json:"version"`
-	SavedAt   time.Time      `json:"saved_at"`
 	Mode      string         `json:"mode"`
 	State     persistedState `json:"state"`
 	ShortCall *persistedCall `json:"short_call,omitempty"`
@@ -136,60 +154,42 @@ func parseMode(s string) (xlksata.Mode, error) {
 	return xlksata.Flat, fmt.Errorf("rotation: %q is not a mode", s)
 }
 
-// Load reads the book. A missing file is a flat book with nothing pending,
-// which is the correct reading of "this has never run". An unreadable or
-// unrecognised one is an error and never a flat book: forgetting an open lot
-// would open a second one on top of it.
-func Load(dataDir string) (Book, error) {
-	raw, err := os.ReadFile(StateFile(dataDir))
-	if errors.Is(err, os.ErrNotExist) {
-		return Book{}, nil
+func (l line) book() (Book, error) {
+	if l.Version != stateVersion {
+		return Book{}, fmt.Errorf("rotation: ledger line is version %d, this build writes %d", l.Version, stateVersion)
 	}
+	mode, err := parseMode(l.Mode)
 	if err != nil {
 		return Book{}, err
-	}
-	var s stored
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return Book{}, fmt.Errorf("rotation: %s: %w", StateFile(dataDir), err)
-	}
-	if s.Version != stateVersion {
-		return Book{}, fmt.Errorf("rotation: %s is version %d, this build writes %d",
-			StateFile(dataDir), s.Version, stateVersion)
-	}
-	mode, err := parseMode(s.Mode)
-	if err != nil {
-		return Book{}, fmt.Errorf("rotation: %s: %w", StateFile(dataDir), err)
 	}
 	b := Book{
 		State: xlksata.State{
 			Mode:       mode,
-			EntryPrice: s.State.EntryPrice,
-			EntryDate:  s.State.EntryDate,
-			OptionPnL:  s.State.OptionPnL,
-			Dividends:  s.State.Dividends,
-			Costs:      s.State.Costs,
+			EntryPrice: l.State.EntryPrice,
+			EntryDate:  l.State.EntryDate,
+			OptionPnL:  l.State.OptionPnL,
+			Dividends:  l.State.Dividends,
+			Costs:      l.State.Costs,
 		},
-		Pending: s.Pending,
-		Marks:   s.Marks,
+		Pending: l.Pending,
+		Marks:   l.Marks,
+		At:      l.TS,
 	}
-	if c := s.ShortCall; c != nil {
+	if c := l.ShortCall; c != nil {
 		b.State.ShortCall = &xlksata.ShortCall{
 			OptionID: c.OptionID, Expiration: c.Expiration, Strike: c.Strike, Credit: c.Credit,
 		}
 	}
 	if b.State.Open() && b.State.EntryPrice <= 0 {
-		return Book{}, fmt.Errorf("rotation: %s holds a %s lot with no entry price",
-			StateFile(dataDir), b.State.Mode)
+		return Book{}, fmt.Errorf("rotation: ledger holds a %s lot with no entry price", b.State.Mode)
 	}
 	return b, nil
 }
 
-// Save writes the book, atomically, 0600. The rename is what makes a crash
-// mid-write leave the previous book rather than half of this one.
-func Save(dataDir string, b Book, now time.Time) error {
-	s := stored{
+func toLine(b Book, now time.Time) line {
+	l := line{
+		TS:      now.UTC(),
 		Version: stateVersion,
-		SavedAt: now.UTC(),
 		Mode:    b.State.Mode.String(),
 		State: persistedState{
 			EntryPrice: b.State.EntryPrice,
@@ -202,20 +202,111 @@ func Save(dataDir string, b Book, now time.Time) error {
 		Marks:   b.Marks,
 	}
 	if c := b.State.ShortCall; c != nil {
-		s.ShortCall = &persistedCall{
+		l.ShortCall = &persistedCall{
 			OptionID: c.OptionID, Expiration: c.Expiration, Strike: c.Strike, Credit: c.Credit,
 		}
 	}
-	raw, err := json.MarshalIndent(s, "", "  ")
+	return l
+}
+
+// Load reads the book: the last line of the ledger that is a whole one.
+//
+// A missing file is a flat book with nothing pending, which is the correct
+// reading of "this has never run". A torn final line is skipped — that is
+// the crash this format is shaped to survive, and the line before it is a
+// complete book one cycle old. A line that parses but does not make sense is
+// an error and never a flat book: forgetting an open lot would open a second
+// one on top of it.
+func Load(dataDir string) (Book, error) {
+	lines, err := readLines(dataDir)
+	if err != nil {
+		return Book{}, err
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		var l line
+		if err := json.Unmarshal([]byte(lines[i]), &l); err != nil {
+			if i == len(lines)-1 {
+				// Only the final line may be torn: a short write at the end
+				// of an append is the one failure this format expects.
+				continue
+			}
+			return Book{}, fmt.Errorf("rotation: %s line %d is not JSON: %w", LedgerFile(dataDir), i+1, err)
+		}
+		return l.book()
+	}
+	return Book{}, nil
+}
+
+// History reads every whole book the ledger holds, oldest first. It is for
+// looking at what happened, not for deciding: nothing in the runtime reads
+// more than the last line.
+func History(dataDir string) ([]Book, error) {
+	lines, err := readLines(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	var out []Book
+	for i, raw := range lines {
+		var l line
+		if err := json.Unmarshal([]byte(raw), &l); err != nil {
+			if i == len(lines)-1 {
+				continue
+			}
+			return nil, fmt.Errorf("rotation: %s line %d is not JSON: %w", LedgerFile(dataDir), i+1, err)
+		}
+		b, err := l.book()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, nil
+}
+
+func readLines(dataDir string) ([]string, error) {
+	f, err := os.Open(LedgerFile(dataDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var lines []string
+	sc := bufio.NewScanner(f)
+	// A book is small; the default 64 KiB token is already generous, but a
+	// scanner that stops early would look exactly like a truncated file.
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		if s := strings.TrimSpace(sc.Text()); s != "" {
+			lines = append(lines, s)
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	return lines, nil
+}
+
+// Save appends the book. Nothing is ever rewritten, so a crash can only ever
+// lose the line being written, and the write is synced before it returns:
+// the book has to be on disk before the order it authorises goes out.
+func Save(dataDir string, b Book, now time.Time) error {
+	raw, err := json.Marshal(toLine(b, now))
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return err
 	}
-	tmp := StateFile(dataDir) + ".tmp"
-	if err := os.WriteFile(tmp, append(raw, '\n'), 0o600); err != nil {
+	f, err := os.OpenFile(LedgerFile(dataDir), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, StateFile(dataDir))
+	defer f.Close()
+	if _, err := f.Write(append(raw, '\n')); err != nil {
+		return err
+	}
+	return f.Sync()
 }

@@ -266,6 +266,43 @@ daemon that forgot how many orders it had sent today, or where the equity
 high-water mark was, would hand the gate a clean slate on every restart —
 which is exactly when the gate matters most.
 
+### The book is an append-only ledger
+
+`<data>/rotation.jsonl` holds one timestamped JSON object per line, appended
+and never rewritten, the way `internal/journal` keeps a run. `bnb rotate
+-history` prints it.
+
+A line is a whole snapshot of the book rather than an event to fold, and the
+reason is that the *why* of every change is already in the journal — the
+quote, the decision, the order. An event log here would say the same things
+twice and move the burden of correctness into a replay. What this file has to
+survive is a crash, and a snapshot per line survives it in the way that
+matters: the final line may be torn, and the line before it is a complete and
+consistent book, one cycle stale. A fold over a torn event log loses the same
+cycle with more machinery. So `Load` reads backwards and takes the last whole
+line; a torn final line is skipped, and a line that parses but does not make
+sense is an error, never a flat book, because forgetting an open lot is how a
+second one gets opened on top of it.
+
+Because nothing is rewritten, the file is also the history: every state the
+book has ever been in, timestamped. That is the answer to "how did this lot
+get here", which a mutable snapshot could not give.
+
+### One rotation per data directory
+
+`rotation.Acquire` takes an advisory `flock` on `<data>/rotation.lock` for as
+long as a process may act, and `bnb rotate` holds it. This is not
+housekeeping. The book is the only thing stopping a second lot being opened
+on top of the first, and it works only if one process at a time reads it,
+decides, and appends. Two rotations over one directory — a daemon and a
+scheduled run, or two copies of the daemon after a botched restart — would
+each read a flat book, each decide to buy, and each buy, because neither's
+order is visible to the other until it has already gone out. The lock is held
+by the open descriptor, so a crash leaves nothing stale to clear.
+
+This is what makes a scheduled run safe to put beside a daemon: the second
+one to start refuses, loudly, naming the process that has it.
+
 One consequence worth knowing before a live run: a 100-share XLK lot is about
 $18,800, far over §6's $500 confirmation threshold, so `bnb rotate -live`
 **refuses every entry** unless it is also given `-yes`. The command warns
