@@ -11,7 +11,7 @@ VERSION_PKG := github.com/chinmay28/bulls-and-bears/server/internal/version
 PATCH := $(shell node scripts/version.mjs --patch 2>/dev/null)
 LDFLAGS := -s -w $(if $(PATCH),-X $(VERSION_PKG).Patch=$(PATCH))
 
-.PHONY: build server web icons test test-web test-icongen test-installer test-research vet lint run clean version bump-version golden golden-ratio golden-fixtures golden-study parity backtest-compare backtest-compare-ratio
+.PHONY: build server web icons test test-web test-icongen test-installer test-research vet lint run clean version bump-version intraday-window golden golden-ratio golden-fixtures golden-study parity backtest-compare backtest-compare-ratio
 
 ## build: PWA into the embed directory, then the single binary
 build: web server
@@ -65,6 +65,11 @@ test-research:
 ## GOLDEN_FLAGS=--synthetic uses the seeded pair instead)
 golden:
 	cd research && uv run python scripts/gld_gdx.py $(GOLDEN_FLAGS)
+
+## intraday-window: how often a hold between two times of day paid (needs uv and Yahoo).
+## WINDOW_FLAGS passes the script's flags: --universe, --window, --interval, --days, --cost-bps.
+intraday-window:
+	cd research && uv run python scripts/intraday_window.py $(WINDOW_FLAGS)
 
 ## parity: the Go tests that hold the runtime to the research side's goldens
 parity:

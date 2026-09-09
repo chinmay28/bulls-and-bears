@@ -239,3 +239,40 @@ and what the operator should do next, is the last invocation alone. The
 completed re-run still showed the dead attempt's failure under a Completed
 badge. `apps/web/src/lib/journal.ts` draws the boundary now, and a file with
 more than one invocation says so on the card.
+
+## What Yahoo serves inside a session, and what it does not
+
+A question about a hold from 10:00 to 15:00 in New York — 7am to noon on the
+Pacific coast — needs bars the plan never asked for: it is written end to end
+around daily bars, one Parquet file per symbol, `adjclose` for returns.
+Intraday is a different feed with harder limits, now recorded in
+`tt/data/intraday.py`:
+
+- Yahoo refuses old intraday requests rather than truncating them. About 30
+  days at one minute, 60 at anything finer than an hour, 730 at the hour.
+  So the *exact* 10:00-15:00 window is a ~40-session sample, whose binomial
+  standard error on a win rate is about 8 points; the hourly 10:30-15:30
+  window reaches two years and roughly 500 sessions, at ±2 points, and is the
+  only one worth an opinion.
+- Intraday bars are unadjusted for splits and dividends. That is harmless for
+  a hold inside one session, since both land between sessions, and wrong for
+  anything spanning a night — which is why these bars are not written to
+  `data/bars/`, no spec is emitted from them, and `intraday.py` keeps its own
+  invariants instead of borrowing `checks.check`.
+- A bar is stamped with the start of the period it covers, so the open of the
+  10:00 bar is the 10:00 print and its close is the 10:29 one. A time that is
+  not on the interval's grid is unreachable, not roundable: at one hour there
+  is no 10:00 bar at all, and `check_grid` names the two that bracket it
+  rather than silently trading 10:30.
+
+Timestamps are converted to the exchange's own clock, so a time of day means
+the same thing on both sides of a daylight-saving change; a Pacific trader's
+"7am" is 10:00 in New York in January and in July alike.
+
+The session this was built in could not reach Yahoo at all — the egress
+policy allows package registries and GitHub, and denied `query1`/`query2`,
+Stooq, Nasdaq, Alpaca, Polygon, Tiingo and Finnhub alike — so **no win rate
+was measured here**. `make intraday-window` on a machine that reaches Yahoo
+prints it, gross and net of a round-trip cost, with the standard error beside
+it. Nothing about this is a strategy: it emits no spec, writes no golden, and
+the runtime never learns of it.

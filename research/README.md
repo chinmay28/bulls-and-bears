@@ -8,8 +8,10 @@ runs unattended.
 
 ```
 tt/data/        bars.py (the §4.1 Parquet schema), yahoo.py, checks.py, synthetic.py,
-                adjust.py (adjusted open/high/low from adjclose/close)
-tt/stats/       adf, engle_granger, johansen, halflife_ar1, kelly
+                adjust.py (adjusted open/high/low from adjclose/close),
+                intraday.py (bars inside a session, and what Yahoo will not serve of them)
+tt/stats/       adf, engle_granger, johansen, halflife_ar1, kelly,
+                session.py (what a hold between two times of day did, day by day)
 tt/indicators/  rolling mean/sd/z-score/return, SMA, Donchian, realised vol, ATR, Wilder RSI —
                 the calculations the strategies share, per docs/CONTRACTS.md "Indicators"
 tt/backtest/    engine.py (same-close and next-open fills), metrics.py, walkforward.py
@@ -25,6 +27,8 @@ scripts/        one study each, docs/strategies/ has the write-up of each:
                   rsi2_reversion.py, sector_rotation.py
                 golden_next_open.py and golden_indicators.py write the engine and indicator
                 parity fixtures from synthetic series (no network)
+                intraday_window.py answers a question rather than emitting a spec: how often
+                a hold between two times of day paid
 ```
 
 docs/strategies/SOURCES.md is the catalogue of where every strategy was
@@ -41,6 +45,9 @@ uv run python scripts/gld_gdx.py         # fetch GLD and GDX from Yahoo, backtes
 uv run python scripts/gld_gdx.py --synthetic   # the seeded pair, for parity without network
 
 uv run python scripts/etf_gld_ratio.py         # SPY, QQQ, VTI, XLK against GLD, from Yahoo
+
+uv run python scripts/intraday_window.py                        # VTI and QQQ, 10:00-15:00 ET, 60 days of 30m bars
+uv run python scripts/intraday_window.py --interval 1h --days 730 --window 10:30-15:30
 uv run python scripts/etf_gld_ratio.py --csv-dir DIR   # from Kaggle-format SYMBOL.csv files
 ```
 
