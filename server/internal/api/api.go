@@ -72,6 +72,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/bars/refresh", s.handleRefreshBars)
 
 	mux.HandleFunc("GET /api/book", s.handleBook)
+	mux.HandleFunc("GET /api/rotation", s.handleRotation)
 
 	mux.HandleFunc("GET /api/research", s.handleResearch)
 	mux.HandleFunc("POST /api/research/setup", s.handleResearchSetup)

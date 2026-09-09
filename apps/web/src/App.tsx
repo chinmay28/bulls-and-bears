@@ -7,6 +7,7 @@ import Book from './pages/Book'
 import NotFound from './pages/NotFound'
 import Overview from './pages/Overview'
 import Research from './pages/Research'
+import Rotation from './pages/Rotation'
 import RunDetail from './pages/RunDetail'
 import Settings from './pages/Settings'
 import Strategies from './pages/Strategies'
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/strategies/:name" element={<StrategyDetail />} />
         <Route path="/research" element={<Research />} />
         <Route path="/book" element={<Book />} />
+        <Route path="/rotation" element={<Rotation />} />
         <Route path="/runs/:id" element={<RunDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />

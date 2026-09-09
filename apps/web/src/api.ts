@@ -8,6 +8,7 @@ import type {
   RefillResult,
   ResearchInfo,
   ResearchJob,
+  Rotation,
   Run,
   Schedule,
   RunDetail,
@@ -101,6 +102,10 @@ export const api = {
    *  kept outside the spec so research cannot make it. */
   setStage: (name: string, stage: 'paper' | 'live') =>
     request<Strategy>(`/api/strategies/${encodeURIComponent(name)}/stage`, { method: 'PUT', ...json({ stage }) }),
+
+  /** The rotation's lot. Read-only, and it never takes the rotation's lock:
+   *  a status card that could block a trading cycle would be worse than none. */
+  rotation: () => request<Rotation>('/api/rotation'),
 
   runs: () => request<Run[]>('/api/runs'),
   run: (id: string) => request<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),

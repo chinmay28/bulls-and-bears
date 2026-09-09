@@ -303,6 +303,28 @@ by the open descriptor, so a crash leaves nothing stale to clear.
 This is what makes a scheduled run safe to put beside a daemon: the second
 one to start refuses, loudly, naming the process that has it.
 
+### Watching it from the app
+
+`GET /api/rotation` and the Rotation screen, reached from the Book tab, show
+the lot: its mode, what it has banked against the +1.00% target, the price
+the shares have to reach to close the rest, the written call and what
+assignment there would return, the order it is waiting on, and the ledger.
+
+It is **read-only, and that is a property rather than a shortfall**. The
+rotation is a separate process holding the broker connection and the data
+directory's lock, so the server has no way to place an order for it — and no
+business taking that lock to find out what it is doing. `rotation.Holder`
+therefore reads the pid out of the lock file rather than trying to acquire
+it: a status card that could block a trading cycle would be worse than no
+card, and there is a test asserting the endpoint leaves a held lock held.
+
+The one control the app already had still works on this runtime: the halt
+marker behind the Settings tab is the same one every rotation cycle reads
+before it acts.
+
+The screen also carries the schedule and the rules, so a data directory the
+rotation has never run in shows what it *would* do rather than an error.
+
 ### Running it from a schedule instead of a daemon
 
 `bnb rotate -cron` prints a schedule. Two things had to be solved before a

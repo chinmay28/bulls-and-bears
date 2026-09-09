@@ -302,3 +302,90 @@ export interface JobLog {
   log: string
   next: number
 }
+
+/** The XLK/SATA rotation's lot, as the Rotation screen shows it. Read-only:
+ *  the rotation is a separate process holding the broker connection and the
+ *  data directory's lock, so the app watches it and can stop it, but cannot
+ *  place an order for it. */
+export interface Rotation {
+  /** False when the rotation has never run in this data directory. */
+  configured: boolean
+  mode: 'flat' | 'held' | 'recovery' | string
+  /** Whether a process still holds the lock, and which. */
+  running: boolean
+  holderPid: number
+
+  /** The two symbols, so the screen names them rather than hard-coding them. */
+  risk: string
+  park: string
+
+  entryPrice: number
+  entryDate: string
+  /** The original purchase value every percentage is measured against. */
+  basis: number
+  optionPnl: number
+  dividends: number
+  costs: number
+  /** Everything the combined figure counts except the shares' own move. */
+  banked: number
+
+  quickTargetPct: number
+  recoveryTargetPct: number
+  recoveryTargetUsd: number
+  /** The share price at which the combined figure reaches the target. */
+  breakEvenPrice: number
+
+  shortCall: RotationCall | null
+  pending: RotationPending | null
+
+  ordersToday: number
+  startOfDayEquity: number
+  highWaterEquity: number
+  dailyLimitHits: number
+  marksDay: string
+
+  updatedAt: string
+  /** Newest first, at most fifty. */
+  history: RotationEntry[]
+  schedule: RotationPhase[]
+  rules: RotationRule[]
+}
+
+export interface RotationCall {
+  optionId: string
+  strike: number
+  expiration: string
+  credit: number
+  /** What the lot returns if it is called away at this strike. */
+  assignedPct: number
+}
+
+export interface RotationPending {
+  orderId: string
+  kind: string
+  symbol: string
+  strike: number
+  placedAt: string
+}
+
+export interface RotationEntry {
+  at: string
+  mode: string
+  entry: number
+  optionPnl: number
+  strike: number
+  pending: string
+}
+
+export interface RotationPhase {
+  name: string
+  pt: string
+  utc: string
+  cron: string
+  what: string
+}
+
+export interface RotationRule {
+  label: string
+  value: string
+}

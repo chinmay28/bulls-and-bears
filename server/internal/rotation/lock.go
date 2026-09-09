@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // LockFile is the exclusive lock a running rotation holds on a data
@@ -61,9 +62,24 @@ func (l *Lock) Release() error {
 }
 
 func holder(dataDir string) string {
-	b, err := os.ReadFile(LockFile(dataDir))
-	if err != nil || len(b) == 0 {
+	pid, ok := Holder(dataDir)
+	if !ok {
 		return "unknown"
 	}
-	return string(b[:len(b)-1])
+	return fmt.Sprintf("pid %d", pid)
+}
+
+// Holder reads the pid in the lock file without touching the lock itself, so
+// something that only wants to report on a running rotation — the app's
+// status card — cannot contend with the rotation for it.
+func Holder(dataDir string) (int, bool) {
+	b, err := os.ReadFile(LockFile(dataDir))
+	if err != nil {
+		return 0, false
+	}
+	var pid int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(b)), "pid %d", &pid); err != nil {
+		return 0, false
+	}
+	return pid, pid > 0
 }

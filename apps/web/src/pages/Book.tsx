@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { TabPage } from '../components/Layout'
 import { EquityLine } from '../components/signal'
@@ -17,8 +18,42 @@ export default function Book() {
       {!noBook && <Loading error={error} offline={offline} hasData={!!data} />}
       {!data && loading && <div className="empty">Loading…</div>}
       {noBook && <Empty message={error ?? ''} />}
+      <RotationCard />
       {data && <BookView book={data} />}
     </TabPage>
+  )
+}
+
+/** The way into the rotation, with enough on it to not need the tap: the
+ *  rotation is a separate runtime from the paper book, and this is where an
+ *  account is looked at. Its own errors stay on it — a rotation that has
+ *  never run must not make the Book tab look broken. */
+function RotationCard() {
+  const { data } = useLoader(() => api.rotation(), [], 30000)
+  if (!data) return null
+  const open = data.mode === 'held' || data.mode === 'recovery'
+  return (
+    <Link to="/rotation" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <Card>
+        <div className="row between">
+          <div className="grow">
+            <div className="title">
+              {data.risk} / {data.park} rotation
+            </div>
+            <div className="sub">
+              {parts(
+                data.mode,
+                data.running ? 'running' : data.configured ? 'not running' : 'never run here',
+                open && `entry ${usd(data.entryPrice)}`,
+                open && `banked ${usd(data.banked, true)} of ${usd(data.recoveryTargetUsd)}`,
+                data.pending ? 'waiting on an order' : false,
+              )}
+            </div>
+          </div>
+          <Badge tone={data.mode === 'recovery' ? 'warn' : open ? 'good' : 'neutral'}>{data.mode}</Badge>
+        </div>
+      </Card>
+    </Link>
   )
 }
 

@@ -15,3 +15,6 @@ func lockFD(*os.File) error {
 }
 
 func unlockFD(*os.File) error { return nil }
+
+// Alive cannot be answered where the lock cannot be taken either.
+func Alive(int) bool { return false }
