@@ -107,6 +107,21 @@ func (l *Loop) Serve(ctx context.Context) {
 	}
 }
 
+// InSession reports whether the exchange is open at t, honouring holidays
+// and early closes. The close is exclusive: at 13:00:00 on a half day the
+// market is already shut.
+func (t Times) InSession(at time.Time) bool {
+	s, ok := sched.SessionOn(at.In(t.Loc))
+	if !ok {
+		return false
+	}
+	local := at.In(t.Loc)
+	since := time.Duration(local.Hour())*time.Hour +
+		time.Duration(local.Minute())*time.Minute +
+		time.Duration(local.Second())*time.Second
+	return since >= marketOpen && at.Before(s.Close)
+}
+
 // phaseNow is the phase at t, and the run id of the session it belongs to.
 // A day the exchange is shut has no phase at all.
 func (l *Loop) phaseNow(t time.Time) (xlksata.Phase, bool, string) {

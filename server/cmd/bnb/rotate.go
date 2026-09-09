@@ -47,12 +47,20 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 		maxOrder = fs.Float64("max-order-usd", 0, "refuse any single order above this notional; 0 is uncapped")
 		yes      = fs.Bool("yes", false, "place live orders over the confirmation threshold without asking; a 100-share lot is always over it")
 		history  = fs.Bool("history", false, "print every book the ledger holds and exit; touches nothing")
+		cron     = fs.Bool("cron", false, "print a DST-safe routine schedule and exit; touches nothing")
+		maxCyc   = fs.Int("max-cycles", 4, "with -once: how many cycles one invocation may run, so a two-step sequence finishes in one firing")
+		settle   = fs.Duration("settle", 15*time.Second, "with -once: how long to wait between cycles for a fill to land")
+		force    = fs.Bool("force", false, "with -once: run even though the exchange is shut")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *history {
 		return printHistory(*dataDir)
+	}
+	if *cron {
+		printCron()
+		return nil
 	}
 	if *account == "" {
 		return errors.New("rotate: -account is required; this places real orders and will not guess which account in")
@@ -145,10 +153,12 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 		Live:       *live,
 		IntentID:   uuid.NewString,
 	}
-	run := func(ctx context.Context, p xlksata.Phase, now time.Time) error {
+	// run reports whether the cycle moved anything, which is how a one-shot
+	// invocation knows it has reached a steady state.
+	run := func(ctx context.Context, p xlksata.Phase, now time.Time) (bool, error) {
 		res, err := cyc.Run(ctx, p, now)
 		report(log, res, err)
-		return err
+		return res.Settled != "" || len(res.Placed) > 0, err
 	}
 
 	if *once {
@@ -158,14 +168,24 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 				return fmt.Errorf("rotate: %q is not a phase (want entry, review or manage)", *phase)
 			}
 		}
-		if !ok {
+		if !ok && *phase == "" {
 			return errors.New("rotate: the market is closed and no -phase was given")
 		}
-		return run(ctx, p, time.Now())
+		// A named phase used to skip this. It must not: an order placed
+		// into a shut market queues for the next open, where the quote it
+		// was decided on is hours stale.
+		if !times.InSession(time.Now()) && !*force {
+			return errors.New("rotate: the exchange is shut; -force overrides")
+		}
+		return runOnce(ctx, run, p, *maxCyc, *settle, log)
 	}
 
 	loop := &rotation.Loop{
-		Times: times, Tick: *tick, ManageEvery: *manage, Run: run, Log: log,
+		Times: times, Tick: *tick, ManageEvery: *manage, Log: log,
+		Run: func(ctx context.Context, p xlksata.Phase, now time.Time) error {
+			_, err := run(ctx, p, now)
+			return err
+		},
 		Halted: func() (string, bool) {
 			m, err := halt.Status(*dataDir)
 			if errors.Is(err, halt.ErrNotHalted) {
@@ -212,6 +232,83 @@ func printHistory(dataDir string) error {
 	}
 	fmt.Printf("\n%d entries in %s\n", len(books), rotation.LedgerFile(dataDir))
 	return nil
+}
+
+// runOnce runs up to max cycles in one invocation, pausing between them for
+// a fill to land, and stops as soon as a cycle has nothing left to do.
+//
+// This is what makes a scheduled firing as good as a running daemon. The
+// strategy's sequences take more than one cycle on purpose — sell SATA, then
+// buy XLK once the cash is there; buy the call back, then sell the shares —
+// and a firing that ran a single cycle would leave the second half until the
+// next one, an hour later. Running the sequence out here costs a few seconds
+// and finishes the job.
+func runOnce(ctx context.Context, run func(context.Context, xlksata.Phase, time.Time) (bool, error),
+	phase xlksata.Phase, max int, settle time.Duration, log *slog.Logger) error {
+	if max < 1 {
+		max = 1
+	}
+	for i := 0; i < max; i++ {
+		moved, err := run(ctx, phase, time.Now())
+		if err != nil {
+			return err
+		}
+		if !moved {
+			log.Info("rotate: nothing left to do", "cycles", i+1)
+			return nil
+		}
+		// After the first cycle the named phase is spent: what follows is
+		// management, which is what carries a sequence to its end.
+		phase = xlksata.PhaseManage
+		if i == max-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(settle):
+		}
+	}
+	log.Info("rotate: cycle budget spent", "cycles", max,
+		"note", "the sequence will continue on the next firing")
+	return nil
+}
+
+// printCron prints a routine schedule that stays inside the trading session
+// all year.
+//
+// The rules are stated in Pacific and cron is evaluated in UTC, which does
+// not follow US daylight saving, so no fixed expression can hold 07:12 and
+// 12:07 PT in both halves of the year. What can be held is the shape: a
+// morning entry and a review four hours and fifty-five minutes later, both
+// comfortably inside the session under either offset. 14:45 and 19:40 UTC
+// are the times that do it — the window for keeping the full hold in session
+// year-round is only 14:30 to 15:05, and this sits in the middle of it.
+func printCron() {
+	fmt.Print(`# Routine schedule for the XLK/SATA rotation. Cron is UTC.
+#
+# The rules say 07:12 and 12:07 Pacific. Cron cannot follow US daylight
+# saving, so these hold the 4h55m gap between the two and stay inside the
+# session under both offsets, rather than holding the wall-clock times:
+#
+#   14:45 UTC entry   = 07:45 PDT (open+75m) | 06:45 PST (open+15m)
+#   19:40 UTC review  = 12:40 PDT (close-20m) | 11:40 PST (close-80m)
+#
+# Weekdays only; the exchange calendar is checked at run time, so a holiday
+# firing exits without trading. On an early-close day the review falls after
+# the close and is skipped: the lot carries to the next session.
+
+45 14 * * 1-5   bnb rotate -account <ACCOUNT> -once -phase entry
+40 19 * * 1-5   bnb rotate -account <ACCOUNT> -once -phase review
+0  15-20 * * 1-5 bnb rotate -account <ACCOUNT> -once -phase manage
+
+# Add -live -yes to place real orders. Without them every order is reviewed
+# against the account and none is placed.
+#
+# Each firing runs up to -max-cycles cycles (default 4), so a sequence that
+# needs two steps — sell SATA then buy XLK; buy the call back then sell the
+# shares — finishes in one firing instead of waiting for the next.
+`)
 }
 
 func parsePhase(s string) (xlksata.Phase, bool) {

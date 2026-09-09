@@ -303,6 +303,47 @@ by the open descriptor, so a crash leaves nothing stale to clear.
 This is what makes a scheduled run safe to put beside a daemon: the second
 one to start refuses, loudly, naming the process that has it.
 
+### Running it from a schedule instead of a daemon
+
+`bnb rotate -cron` prints a schedule. Two things had to be solved before a
+scheduled firing was as good as a running daemon.
+
+**Cron is UTC and does not follow US daylight saving**, so no fixed
+expression holds 07:12 and 12:07 Pacific in both halves of the year: 14:12
+UTC is 07:12 PDT but 06:12 PST, eighteen minutes before the opening bell.
+What can be held is the *shape* of the rules — a morning entry and a review
+four hours and fifty-five minutes later, both inside the session under either
+offset. The window for keeping the full hold in session year-round is only
+14:30 to 15:05 UTC; **14:45 and 19:40 UTC** sit in the middle of it:
+
+| | PDT (≈Mar–Nov) | PST (≈Nov–Mar) |
+|---|---|---|
+| 14:45 UTC entry | 07:45 PT, open + 75m | 06:45 PT, open + 15m |
+| 19:40 UTC review | 12:40 PT, close − 20m | 11:40 PT, close − 80m |
+
+So the wall-clock time drifts an hour with the seasons and the hold does not.
+A holiday firing exits without trading, because the calendar is checked at
+run time rather than encoded in the cron. On the three or so early-close days
+a year the review falls after the 13:00 ET close and is skipped; the lot
+stays in `held` and is reviewed the next session.
+
+**A single cycle cannot finish a sequence.** The strategy's steps come in
+pairs on purpose — sell SATA, then buy XLK once the cash is there; buy the
+call back, then sell the shares out from under it — so a firing that ran one
+cycle would leave the second half until the next one. `-once` therefore runs
+up to `-max-cycles` cycles (default 4) in one invocation, waiting `-settle`
+between them for a fill to land and stopping as soon as a cycle has nothing
+left to do. The first cycle runs the named phase and the rest run as
+management, which is what carries a sequence to its end. That costs a few
+seconds and makes an hourly management cron perfectly adequate, which is the
+tightest cron the schedule allows anyway.
+
+One guard came out of this. A named `-phase` used to skip the market-hours
+check, so `-once -phase entry` would happily run at midnight; an equity order
+placed into a shut market queues for the next open, where the quote it was
+decided on is hours stale. `Times.InSession` is now checked whatever the
+phase, and `-force` is the only way past it.
+
 One consequence worth knowing before a live run: a 100-share XLK lot is about
 $18,800, far over §6's $500 confirmation threshold, so `bnb rotate -live`
 **refuses every entry** unless it is also given `-yes`. The command warns

@@ -249,3 +249,72 @@ func TestLoopRestartRerunsTheDaysPhases(t *testing.T) {
 			count(second, xlksata.PhaseEntry))
 	}
 }
+
+// The one-shot path checks this before running a named phase, because an
+// order placed into a shut market queues for the next open, where the quote
+// it was decided on is hours stale.
+func TestInSession(t *testing.T) {
+	ti, err := DefaultTimes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	et := func(y int, m time.Month, d, h, min int) time.Time {
+		return time.Date(y, m, d, h, min, 0, 0, ti.Loc)
+	}
+	cases := []struct {
+		name string
+		at   time.Time
+		want bool
+	}{
+		{"mid-session Wednesday", et(2026, 9, 9, 12, 0), true},
+		{"the opening minute", et(2026, 9, 9, 9, 30), true},
+		{"a minute before the open", et(2026, 9, 9, 9, 29), false},
+		{"the closing instant is shut", et(2026, 9, 9, 16, 0), false},
+		{"after the close", et(2026, 9, 9, 16, 1), false},
+		{"Saturday", et(2026, 9, 12, 12, 0), false},
+		{"Christmas Day", et(2026, 12, 25, 12, 0), false},
+		{"before an early close", et(2026, 11, 27, 12, 59), true},
+		{"after an early close", et(2026, 11, 27, 13, 1), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ti.InSession(c.at); got != c.want {
+				t.Fatalf("InSession(%s) = %v, want %v", c.at.Format(time.RFC3339), got, c.want)
+			}
+		})
+	}
+}
+
+// The schedule a routine fires on is UTC and cannot follow US daylight
+// saving, so it holds the shape of the rules rather than their wall-clock
+// times: the 4h55m gap, and both ends inside the session under either
+// offset. These are the times printed by `bnb rotate -cron`, checked against
+// the real calendar on a summer and a winter trading day.
+func TestRoutineScheduleStaysInSessionAllYear(t *testing.T) {
+	ti, err := DefaultTimes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const entryUTC, reviewUTC = 14*time.Hour + 45*time.Minute, 19*time.Hour + 40*time.Minute
+
+	if gap := reviewUTC - entryUTC; gap != 4*time.Hour+55*time.Minute {
+		t.Fatalf("the schedule's hold is %s, want the rules' 4h55m", gap)
+	}
+	for _, day := range []struct {
+		name string
+		date time.Time
+	}{
+		{"summer (PDT)", time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC)},
+		{"winter (PST)", time.Date(2026, 12, 9, 0, 0, 0, 0, time.UTC)},
+	} {
+		for _, at := range []struct {
+			what string
+			off  time.Duration
+		}{{"entry", entryUTC}, {"review", reviewUTC}} {
+			when := day.date.Add(at.off)
+			if !ti.InSession(when) {
+				t.Errorf("%s %s at %s UTC is outside the session", day.name, at.what, when.Format("15:04"))
+			}
+		}
+	}
+}
