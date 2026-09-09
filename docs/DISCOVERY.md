@@ -205,23 +205,44 @@ strategy is not armed.
 
 ## What is not built yet for the rotation
 
-The engine decides; nothing yet carries its decisions to the broker. Missing,
-in the order it would be built:
+The engine decides; `internal/robinhood` and `internal/rotation` now carry
+its decisions to the account. `rotation.Cycle` is one turn: settle whatever
+the last cycle placed, read the whole book into a snapshot, decide, write the
+state, place at most one order. Its ordering is the part worth knowing —
+settlement runs first because a fill is the only thing that can set the lot's
+entry price, and the state is written *before* the order goes out, so a crash
+between the two leaves a book that says an order may be outstanding rather
+than one that has forgotten an order already at the exchange.
 
-- **A Robinhood broker and market data adapter** over `internal/mcp`.
-  `broker.Broker` has no options in it: `Order` is a symbol, a side, a
-  quantity and a limit, with no contract id, no `position_effect` and no
-  multiplier. Extending it is a contract change to weigh against a second
-  interface beside it.
-- **An intraday scheduler.** `sched.Loop` fires once, ten minutes before the
-  close. This strategy needs 07:12 PT, 12:07 PT and manage cycles between,
-  which is the same "second fire time" work the Execution timing section
-  above already wants for `next_open` specs.
-- **Persisted lot state.** `State` has to survive a restart mid-recovery, in
-  the data directory beside `internal/stage`'s file. Reconstructing it from
-  order history is possible and is not the same thing.
+Two consequences of the wire format are worth recording because both would be
+silent bugs. An option order's `average_price` is per *contract*, so a 0.85
+credit comes back as 85 and is divided by the multiplier before it reaches
+the strategy. And an option *position* carries an id but no strike, so every
+open contract costs an extra `get_option_instruments` lookup to price the
+assignment test against.
+
+Still missing, in the order it would be built:
+
+- **A scheduler that fires it.** `rotation.Times` knows the phases — 07:12
+  and 12:07 Pacific, held in Eastern because both US zones change over on
+  the same dates — but `sched.Loop` still fires once a day before the close
+  and nothing calls `Cycle`. This is the same "second fire time" work the
+  Execution timing section above already wants for `next_open` specs, and it
+  is the last thing between this and a run.
+- **A journal of its own.** `Cycle` returns a Result; nothing writes it to
+  `internal/journal` yet, so §4.5's rule that every `order_submitted` follows
+  an allowed `risk_decision` is not yet enforced on this path.
 - **A risk gate that understands an option obligation.** §6's rules are
-  written in notional and leverage; a short call's risk is neither.
+  written in notional and leverage; a short call's risk is neither, and the
+  gate does not see these orders at all today.
+- **No `broker.Broker` implementation.** The rotation deliberately does not
+  go through that interface: `Order` has no contract id, no `position_effect`
+  and no multiplier, and widening it for one strategy would push options into
+  every other strategy's path. `internal/rotation` talks to
+  `internal/robinhood` directly, and the paper broker is therefore not
+  available to it — which is why the honest dry run here is
+  `Executor.DryRun`, reviewing every order against the live account and
+  placing none.
 
 ## Research data when Yahoo is unreachable
 

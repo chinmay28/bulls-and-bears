@@ -281,7 +281,8 @@ func (e *Engine) recover(s Snapshot, st State) Plan {
 	return Plan{
 		Next: st,
 		Intents: []Intent{{
-			Kind: SellCallToOpen, Symbol: Risk, Qty: 1, Limit: pick.Limit, OptionID: pick.Call.OptionID,
+			Kind: SellCallToOpen, Symbol: Risk, Qty: 1, Limit: pick.Limit,
+			OptionID: pick.Call.OptionID, Strike: pick.Call.Strike, Expiration: pick.Call.Expiration,
 			Why: why,
 		}},
 		Reason: fmt.Sprintf("recovery: %+.3f%% combined; writing the %s %.2f call for %.2f", pct*100,
