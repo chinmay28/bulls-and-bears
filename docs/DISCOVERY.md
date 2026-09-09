@@ -220,3 +220,22 @@ for days (`rsi2_reversion`) or trade on false breakouts (`donchian_breakout`)
 paid for their turnover, and the slippage stress in each `robustness.json`
 is the number to read first; the rules that turn monthly
 (`risk_parity_trend`, `sector_rotation`) kept most of their Sharpe at 20 bp.
+
+## A run id is a date, not a run
+
+The journal is one file per run id and the run id is the trading date the
+session is for (`sched.Session.RunID`, which on a holiday names the next
+session — a run started on Labor Day is `2026-09-08`). `journal.Open`
+appends and never truncates, so re-running a date puts **several invocations
+in one file**: a run that failed at 10:42 for want of an armed spec and the
+re-run that armed and completed at 12:53 are the same journal.
+
+That splits what the run page can say in two. What *happened* under the date
+— events, orders, fills, rejections, errors — is the total over every
+invocation, and `journal.Summarize` counts it that way; the status is the
+last invocation's, because that is the run's outcome. But what the run *is*,
+and what the operator should do next, is the last invocation alone. The
+"Nothing was armed" card read the last error anywhere in the file, so a
+completed re-run still showed the dead attempt's failure under a Completed
+badge. `apps/web/src/lib/journal.ts` draws the boundary now, and a file with
+more than one invocation says so on the card.
