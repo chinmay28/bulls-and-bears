@@ -235,14 +235,44 @@ are already in Eastern.
 what places them, and `-account` has no default, because a command that
 places real orders should not guess which account in.
 
-Still missing, in the order it would be built:
+`rotation.Gate` applies §6 and `rotation.Cycler` journals every cycle, so
+`journal.Check`'s invariant — an `order_submitted` only ever after an allowed
+`risk_decision` for the same intent — holds on this path and is tested
+against a real cycle. The intent id is the same string in three places: the
+gate's decision, the journal line, and the broker's `ref_id`.
 
-- **A journal of its own.** `Cycle` returns a Result; nothing writes it to
-  `internal/journal` yet, so §4.5's rule that every `order_submitted` follows
-  an allowed `risk_decision` is not yet enforced on this path.
-- **A risk gate that understands an option obligation.** §6's rules are
-  written in notional and leverage; a short call's risk is neither, and the
-  gate does not see these orders at all today.
+It is a second gate rather than a use of `risk.RuleGate`, because that one
+prices intents through `broker.Order` — a symbol, a side and a share count —
+which cannot express a contract. Pushing an option leg through it would not
+fail, it would produce a confident wrong number, valuing a covered call as
+if it were a hundred shares of premium. So the equity-level rules, which are
+arithmetic on the account and mean the same thing here, are delegated to
+`risk.RuleGate` unchanged, and only the per-intent rules are re-stated. Both
+read the same `risk.Config`, so the thresholds still live in one `risk.yaml`.
+
+Two judgements are recorded in that gate rather than left implicit:
+
+- The daily loss limit stops opening orders and allows closes. **A written
+  call counts as risk-reducing**, despite carrying the position effect
+  "open": it collects premium against shares already held, and it is the
+  only way a recovery makes progress. Blocking it would trap a losing lot
+  with no route out, which is the opposite of what the rule is for.
+- **A sweep into SATA counts as opening**, so it is refused after a limit
+  day and the proceeds sit in cash until the next session. That is the
+  literal rule, and idle cash is the safe side of it.
+
+The gate's day-scoped counters live in the book (`rotation.Marks`), because a
+daemon that forgot how many orders it had sent today, or where the equity
+high-water mark was, would hand the gate a clean slate on every restart —
+which is exactly when the gate matters most.
+
+One consequence worth knowing before a live run: a 100-share XLK lot is about
+$18,800, far over §6's $500 confirmation threshold, so `bnb rotate -live`
+**refuses every entry** unless it is also given `-yes`. The command warns
+about this at startup rather than at 07:12.
+
+Still missing:
+
 - **No `broker.Broker` implementation.** The rotation deliberately does not
   go through that interface: `Order` has no contract id, no `position_effect`
   and no multiplier, and widening it for one strategy would push options into

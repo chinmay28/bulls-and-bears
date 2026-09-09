@@ -17,6 +17,7 @@ import (
 	"github.com/chinmay28/bulls-and-bears/server/internal/halt"
 	"github.com/chinmay28/bulls-and-bears/server/internal/mcp"
 	"github.com/chinmay28/bulls-and-bears/server/internal/mcp/oauth"
+	"github.com/chinmay28/bulls-and-bears/server/internal/risk"
 	"github.com/chinmay28/bulls-and-bears/server/internal/robinhood"
 	"github.com/chinmay28/bulls-and-bears/server/internal/rotation"
 	"github.com/chinmay28/bulls-and-bears/server/internal/strategy/xlksata"
@@ -42,6 +43,9 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 		phase    = fs.String("phase", "", "with -once: entry, review or manage (default: whatever the clock says)")
 		manage   = fs.Duration("manage-every", 15*time.Minute, "how often to run a management cycle between the two named phases")
 		tick     = fs.Duration("tick", time.Minute, "how often to consult the clock")
+		riskPath = fs.String("risk", envOr("BNB_RISK", ""), "risk.yaml with the gate's thresholds; default: the plan's defaults")
+		maxOrder = fs.Float64("max-order-usd", 0, "refuse any single order above this notional; 0 is uncapped")
+		yes      = fs.Bool("yes", false, "place live orders over the confirmation threshold without asking; a 100-share lot is always over it")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -57,6 +61,12 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 	engine, err := xlksata.New(xlksata.Defaults())
 	if err != nil {
 		return err
+	}
+	riskCfg := risk.DefaultConfig()
+	if *riskPath != "" {
+		if riskCfg, err = risk.LoadConfig(*riskPath); err != nil {
+			return err
+		}
 	}
 	times, err := rotation.DefaultTimes()
 	if err != nil {
@@ -96,15 +106,35 @@ func rotateCommand(fs *flag.FlagSet, args []string) error {
 	log.Info("rotate: account ready",
 		"type", acct.Type, "option_level", acct.OptionLevel, "mode", mode)
 
-	ex := &rotation.Executor{
+	// A 100-share lot is roughly $18,800, far over the $500 confirmation
+	// threshold, so an unattended live run refuses every entry without -yes.
+	// Say so at startup rather than at 07:12.
+	if *live && !*yes && riskCfg.ConfirmAboveUSD > 0 {
+		log.Warn("rotate: live without -yes",
+			"threshold", riskCfg.ConfirmAboveUSD,
+			"note", "orders over the threshold will be refused and journalled, not placed")
+	}
+
+	cyc := &rotation.Cycler{
 		Broker: rh,
-		DryRun: !*live,
-		// A fresh key per logical order. Reusing one is what makes a retry
-		// safe; this code never retries, so a new key each time is correct.
-		RefID: func(xlksata.Intent) string { return uuid.NewString() },
+		Engine: engine,
+		Exec: &rotation.Executor{
+			Broker: rh,
+			DryRun: !*live,
+			// A fresh key per logical order. Reusing one is what makes a
+			// retry safe; this code never retries, so a new key each time
+			// is correct.
+			RefID: func(xlksata.Intent) string { return uuid.NewString() },
+		},
+		Gate:       rotation.NewGate(riskCfg, *maxOrder),
+		DataDir:    *dataDir,
+		JournalDir: filepath.Join(*dataDir, "journal"),
+		Confirmed:  *yes,
+		Live:       *live,
+		IntentID:   uuid.NewString,
 	}
 	run := func(ctx context.Context, p xlksata.Phase, now time.Time) error {
-		res, err := rotation.Cycle(ctx, rh, engine, ex, *dataDir, p, now)
+		res, err := cyc.Run(ctx, p, now)
 		report(log, res, err)
 		return err
 	}
@@ -170,6 +200,13 @@ func report(log *slog.Logger, res rotation.Result, err error) {
 	if err != nil {
 		log.Error("rotate: cycle", append(attrs, "err", err)...)
 		return
+	}
+	for _, d := range res.Decisions {
+		if !d.Allowed {
+			log.Warn("rotate: order refused", "intent", d.IntentID, "reason", d.Reason)
+		} else if d.NeedsConfirm {
+			log.Info("rotate: order over the confirmation threshold", "intent", d.IntentID, "reason", d.Reason)
+		}
 	}
 	for _, p := range res.Placed {
 		what := "reviewed"

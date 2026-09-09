@@ -2,6 +2,7 @@ package rotation
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -22,12 +23,20 @@ func newBroker() *broker {
 	return &broker{reader: baseReader(), orderBook: &orderBook{}, writer: &writer{}}
 }
 
+func cycler(t *testing.T, b *broker, dir string) *Cycler {
+	t.Helper()
+	return &Cycler{
+		Broker: b, Engine: eng(t), Exec: &Executor{Broker: b.writer},
+		DataDir: dir, JournalDir: filepath.Join(dir, "journal"),
+		IntentID: func() string { return "intent-1" },
+	}
+}
+
 func run(t *testing.T, b *broker, dir string, phase xlksata.Phase) Result {
 	t.Helper()
-	e := eng(t)
-	res, err := Cycle(context.Background(), b, e, &Executor{Broker: b.writer}, dir, phase, now)
+	res, err := cycler(t, b, dir).Run(context.Background(), phase, now)
 	if err != nil {
-		t.Fatalf("Cycle: %v", err)
+		t.Fatalf("Run: %v", err)
 	}
 	return res
 }
@@ -230,8 +239,7 @@ func TestCycleHaltsOnABookItDoesNotRecognise(t *testing.T) {
 	b := newBroker()
 	b.reader.equity = []robinhood.EquityPosition{{Symbol: "XLK", Quantity: 100}}
 	// State says flat; the account holds a lot.
-	e := eng(t)
-	_, err := Cycle(context.Background(), b, e, &Executor{Broker: b.writer}, dir, xlksata.PhaseEntry, now)
+	_, err := cycler(t, b, dir).Run(context.Background(), xlksata.PhaseEntry, now)
 	if err == nil {
 		t.Fatal("want a halt")
 	}
@@ -244,9 +252,9 @@ func TestCycleDryRunPlacesNothing(t *testing.T) {
 	dir := t.TempDir()
 	b := newBroker()
 	b.reader.portfolio.BuyingPower.BuyingPower = 20_000
-	e := eng(t)
-	res, err := Cycle(context.Background(), b, e,
-		&Executor{Broker: b.writer, DryRun: true}, dir, xlksata.PhaseEntry, now)
+	c := cycler(t, b, dir)
+	c.Exec = &Executor{Broker: b.writer, DryRun: true}
+	res, err := c.Run(context.Background(), xlksata.PhaseEntry, now)
 	if err != nil {
 		t.Fatal(err)
 	}
