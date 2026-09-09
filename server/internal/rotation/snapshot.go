@@ -231,7 +231,7 @@ func PhaseAt(now time.Time, loc *time.Location, entry, review time.Duration, win
 		return xlksata.PhaseEntry, true
 	case since >= review && since < review+window:
 		return xlksata.PhaseReview, true
-	case since >= marketOpen && since <= marketClose:
+	case since >= marketOpen && since < marketClose:
 		return xlksata.PhaseManage, true
 	}
 	return 0, false

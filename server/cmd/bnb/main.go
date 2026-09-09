@@ -3,6 +3,7 @@
 //
 //	bnb                     serve, and run the daily cycle before each close
 //	bnb run [-run-id DATE]  run one cycle now and exit
+//	bnb rotate              serve the XLK/SATA rotation against the live account
 //	bnb backtest -spec FILE replay a spec over the bars on disk and print the numbers
 //	bnb halt [reason]       write the halt marker; bnb resume removes it; bnb status reads it
 //	bnb login               sign in to the Robinhood MCP from a desktop browser; writes the token file
@@ -301,8 +302,10 @@ func runCommand(name string, args []string) error {
 		return backtestCommand(fs, args)
 	case "login", "discover":
 		return mcpCommand(name, fs, args)
+	case "rotate":
+		return rotateCommand(fs, args)
 	}
-	return fmt.Errorf("unknown command %q (want run, backtest, login, discover, halt, resume, status or version)", name)
+	return fmt.Errorf("unknown command %q (want run, rotate, backtest, login, discover, halt, resume, status or version)", name)
 }
 
 func haltCommand(name, dataDir string, rest []string) error {

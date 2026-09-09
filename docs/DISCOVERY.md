@@ -221,14 +221,22 @@ the strategy. And an option *position* carries an id but no strike, so every
 open contract costs an extra `get_option_instruments` lookup to price the
 assignment test against.
 
+`rotation.Loop` fires it, and `bnb rotate` is the command. The loop is
+separate from `sched.Loop` rather than a second fire time on it because the
+two answer different questions: that one asks "when does today close?" and
+runs once against it, this one asks "what is the market doing now?" several
+times a day. Both read the same calendar, so a holiday and an early close are
+honoured identically — and the close is exclusive, since 13:00:00 on a half
+day is already shut. The phases are 07:12 and 12:07 Pacific, held in Eastern
+because both US zones change over on the same dates and the session bounds
+are already in Eastern.
+
+`bnb rotate` defaults to reviewing every order and placing none; `-live` is
+what places them, and `-account` has no default, because a command that
+places real orders should not guess which account in.
+
 Still missing, in the order it would be built:
 
-- **A scheduler that fires it.** `rotation.Times` knows the phases — 07:12
-  and 12:07 Pacific, held in Eastern because both US zones change over on
-  the same dates — but `sched.Loop` still fires once a day before the close
-  and nothing calls `Cycle`. This is the same "second fire time" work the
-  Execution timing section above already wants for `next_open` specs, and it
-  is the last thing between this and a run.
 - **A journal of its own.** `Cycle` returns a Result; nothing writes it to
   `internal/journal` yet, so §4.5's rule that every `order_submitted` follows
   an allowed `risk_decision` is not yet enforced on this path.
