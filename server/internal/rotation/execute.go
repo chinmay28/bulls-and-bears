@@ -50,8 +50,15 @@ func (e *Executor) Execute(ctx context.Context, p xlksata.Plan) ([]Placement, er
 	if len(p.Intents) == 0 {
 		return nil, nil
 	}
-	in := p.Intents[0]
-	req, opt, err := e.request(in)
+	return e.ExecuteIntent(ctx, p.Intents[0], "")
+}
+
+// ExecuteIntent reviews and places one intent under a caller-supplied
+// idempotency key. The key is the intent id the risk gate allowed and the
+// journal recorded, so one identifier ties the decision, the log line and
+// the broker's own deduplication together.
+func (e *Executor) ExecuteIntent(ctx context.Context, in xlksata.Intent, refID string) ([]Placement, error) {
+	req, opt, err := e.request(in, refID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +95,8 @@ func (e *Executor) Execute(ctx context.Context, p xlksata.Plan) ([]Placement, er
 
 // request turns one intent into the order it means. Exactly one of the two
 // is non-nil.
-func (e *Executor) request(in xlksata.Intent) (*robinhood.EquityOrderRequest, *robinhood.OptionOrderRequest, error) {
-	ref := ""
-	if e.RefID != nil {
+func (e *Executor) request(in xlksata.Intent, ref string) (*robinhood.EquityOrderRequest, *robinhood.OptionOrderRequest, error) {
+	if ref == "" && e.RefID != nil {
 		ref = e.RefID(in)
 	}
 	switch in.Kind {

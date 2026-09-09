@@ -43,11 +43,58 @@ type Pending struct {
 	PlacedAt   time.Time    `json:"placed_at"`
 }
 
-// Book is everything this package persists: the strategy's state, and the
-// order it is waiting on.
+// Marks are the day-scoped figures the risk gate reasons about, kept here
+// because they have to survive a restart: a daemon that forgot how many
+// orders it had sent today, or where the equity high-water mark was, would
+// hand the gate a clean slate every time it came back up, which is exactly
+// when the gate matters most.
+type Marks struct {
+	// Day is the trading date the day-scoped fields below belong to.
+	Day              string  `json:"day"`
+	StartOfDayEquity float64 `json:"start_of_day_equity"`
+	HighWaterEquity  float64 `json:"high_water_equity"`
+	OrdersToday      int     `json:"orders_today"`
+	// LimitHitToday records that the daily loss limit was reached, so the
+	// consecutive-days count can be rolled at the next day's first cycle.
+	LimitHitToday bool `json:"limit_hit_today"`
+	// DailyLimitHits is how many trading days in a row the limit was hit.
+	DailyLimitHits int `json:"daily_limit_hits"`
+}
+
+// Roll brings the marks up to date for a trading day at the current equity.
+// Within a day it only raises the high-water mark; across one it resets the
+// day-scoped fields and carries the consecutive-limit count forward or
+// clears it.
+func (m Marks) Roll(day string, equity float64) Marks {
+	if m.Day == day {
+		if equity > m.HighWaterEquity {
+			m.HighWaterEquity = equity
+		}
+		return m
+	}
+	next := Marks{
+		Day:              day,
+		StartOfDayEquity: equity,
+		HighWaterEquity:  m.HighWaterEquity,
+	}
+	if equity > next.HighWaterEquity {
+		next.HighWaterEquity = equity
+	}
+	// A first run has no previous day to judge.
+	if m.Day != "" {
+		if m.LimitHitToday {
+			next.DailyLimitHits = m.DailyLimitHits + 1
+		}
+	}
+	return next
+}
+
+// Book is everything this package persists: the strategy's state, the order
+// it is waiting on, and the gate's running marks.
 type Book struct {
 	State   xlksata.State
 	Pending *Pending
+	Marks   Marks
 }
 
 type stored struct {
@@ -57,6 +104,7 @@ type stored struct {
 	State     persistedState `json:"state"`
 	ShortCall *persistedCall `json:"short_call,omitempty"`
 	Pending   *Pending       `json:"pending,omitempty"`
+	Marks     Marks          `json:"marks"`
 }
 
 type persistedState struct {
@@ -122,6 +170,7 @@ func Load(dataDir string) (Book, error) {
 			Costs:      s.State.Costs,
 		},
 		Pending: s.Pending,
+		Marks:   s.Marks,
 	}
 	if c := s.ShortCall; c != nil {
 		b.State.ShortCall = &xlksata.ShortCall{
@@ -150,6 +199,7 @@ func Save(dataDir string, b Book, now time.Time) error {
 			Costs:      b.State.Costs,
 		},
 		Pending: b.Pending,
+		Marks:   b.Marks,
 	}
 	if c := b.State.ShortCall; c != nil {
 		s.ShortCall = &persistedCall{
