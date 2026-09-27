@@ -24,7 +24,8 @@ curl -fsSL https://raw.githubusercontent.com/chinmay28/bulls-and-bears/main/scri
 Then open `http://<that machine>:8877` on your phone and add it to the home
 screen. Re-run the same command to upgrade: the build happens first, the paper
 book is snapshotted, the new binary is health-checked after it starts, and a
-failed upgrade rolls back to the previous binary and book.
+failed upgrade rolls back to the previous binary and book. The same command
+with `--uninstall` removes the service and keeps the data.
 
 ```sh
 # a PIN for the web UI, a different port, a specific version
