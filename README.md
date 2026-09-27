@@ -31,7 +31,7 @@ failed upgrade rolls back to the previous binary and book.
 curl -fsSL .../quickstart.sh | sudo BNB_PIN=1234 BNB_PORT=9000 BNB_REF=v2026.9.40 bash
 
 # remove the service (the data directory is kept)
-curl -fsSL .../quickstart.sh | sudo bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/chinmay28/bulls-and-bears/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
 ```
 
 It runs dry. Orders fill on paper against the newest bar on disk, and nothing
